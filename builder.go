@@ -142,7 +142,7 @@ func (g *Goty) enum(enum []Enum) {
 			data.Type.PkgPath() + "." + data.Type.Name() + ": " + data.Name)
 	}
 
-	// Convert the enum values to a typescript values using json Marshaller.
+	// Convert the enum values to typescript values using json Marshaller.
 	for idx, enum := range enum {
 		str, err := json.Marshal(enum.Value)
 		if err != nil {
@@ -229,7 +229,8 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 			}
 		}
 
-		if elem.Anonymous && elem.Type.Kind() == reflect.Struct {
+		if elem.Anonymous && (elem.Type.Kind() == reflect.Struct ||
+			elem.Type.Kind() == reflect.Ptr && elem.Type.Elem().Kind() == reflect.Struct) {
 			// Extend the parent struct with a new struct.
 			data.Extends = append(data.Extends, member.Type)
 		} else {

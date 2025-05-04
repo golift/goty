@@ -18,7 +18,7 @@ But of course one of those other packages should have worked! Dude, I agree.
 Let's go through what I did. First, I discovered all the projects I could find.
 You'll see them below, listed in the order I tested them.
 
-Then, I wrote test code for each one that converted [this struct](https://github.com/Notifiarr/notifiarr/blob/c809169b5df9bd72e5d13931c709f34988a506ed/pkg/configfile/config.go#L53-L75)
+Then, I wrote test code for each one that converted [this struct](https://github.com/Notifiarr/notifiarr/blob/0538806dd7753e357ee93d8eef39f640ba9dbc31/pkg/configfile/config.go#L53-L75)
 to typescript.
 Let me digress a moment and explain this struct. I've been working on the [Notifiarr](https://notifiarr.com)
 client for over 4 years now. That struct is the configuration input for the application.

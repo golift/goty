@@ -7,13 +7,12 @@ Transform go structs into typescript interfaces.
 Because no other package out there could handle my application configuration structs.
 
 I use this to transform my go data into json and send it to my Svelte (typescript) front end.
-
-TODO: link that code here when it's contributed.
+You can see the initial [implementation into that project here](https://github.com/Notifiarr/notifiarr/pull/892).
 
 ## Others
 
 None of these produce accurate and usable code. Most don't do either.
-I tested with [this struct](https://github.com/Notifiarr/notifiarr/blob/c809169b5df9bd72e5d13931c709f34988a506ed/pkg/configfile/config.go#L53).
+I tested with [this struct](https://github.com/Notifiarr/notifiarr/blob/0538806dd7753e357ee93d8eef39f640ba9dbc31/pkg/configfile/config.go#L53).
 
 - https://github.com/StirlingMarketingGroup/go2ts
 - https://github.com/tompston/gut
@@ -45,18 +44,17 @@ import (
 	"golift.io/goty/gotydoc"
 )
 
-// Weekdays are cool.
-var Weekdays = []goty.Enum{
-	{Name: "Sunday", Value: time.Sunday},
-	{Name: "Monday", Value: time.Monday},
-	{Name: "Tuesday", Value: time.Tuesday},
-	{Name: "Wednesday", Value: time.Wednesday},
-	{Name: "Thursday", Value: time.Thursday},
-	{Name: "Friday", Value: time.Friday},
-	{Name: "Saturday", Value: time.Saturday},
-}
-
 func main() {
+	weekdays := []goty.Enum{
+		{Name: "Sunday", Value: time.Sunday},
+		{Name: "Monday", Value: time.Monday},
+		{Name: "Tuesday", Value: time.Tuesday},
+		{Name: "Wednesday", Value: time.Wednesday},
+		{Name: "Thursday", Value: time.Thursday},
+		{Name: "Friday", Value: time.Friday},
+		{Name: "Saturday", Value: time.Saturday},
+	}
+
 	docs := gotydoc.New() // Optionally, parse go/doc comments.
 	goat := goty.NewGoty(&goty.Config{
 		GlobalOverrides: goty.Override{
@@ -67,7 +65,7 @@ func main() {
 				return "Noti" + name
 			},
 		},
-		DocHandler: docs,
+		Docs: docs,
 		Overrides: goty.Overrides{
 			cnfg.Duration{}: {Type: "string"},
 			// Give the custom enum a JSDoc comment.
@@ -76,14 +74,13 @@ func main() {
 	})
 
 	// Parse the weekday enums and then parse the config struct.
-	goat.Enums(Weekdays).Parse(configfile.Config{})
+	goat.Enums(weekdays).Parse(configfile.Config{})
 	// Make this folder by running `go mod vendor`. Delete it when you're finished.
 	// This reads in all the docs and makes them available for printing/writing.
 	// Do this before Printing and after parsing (so you have a list of package names).
 	docs.AddMust("../vendor", goat.Pkgs()...)
 	// goat.Print()
 	goat.Write("notifiarrConfig.ts", true)
-	log.Println(len(goat.Pkgs()), goat.Pkgs())
 }
 ```
 

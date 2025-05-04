@@ -360,7 +360,7 @@ export interface NotiSabNZBConfig extends NotiExtraConfig, NotiSabnzbdConfig {};
  */
 export interface NotiSabnzbdConfig {
   url: string;
-  apikey: string;
+  apiKey: string;
 };
 
 /**
