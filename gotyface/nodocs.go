@@ -21,4 +21,4 @@ func (n *noDocs) Member(_ reflect.Type, _ string) string {
 }
 
 // Validate the interface implementation.
-var _ DocHandler = &noDocs{}
+var _ Docs = &noDocs{}

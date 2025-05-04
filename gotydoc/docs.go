@@ -137,4 +137,4 @@ func (d *Docs) findDoc(typ reflect.Type) *doc.Type {
 }
 
 // Validate the interface implementation.
-var _ gotyface.DocHandler = &Docs{}
+var _ gotyface.Docs = &Docs{}

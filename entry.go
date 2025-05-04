@@ -39,7 +39,7 @@ type Config struct {
 	// GlobalOverrides are applied to all structs unless a type-specific override exists.
 	GlobalOverrides Override `json:"globalOverrides" toml:"global_overrides" xml:"global-override" yaml:"globalOverrides"`
 	// DocHandler is the handler for go/doc comments. Comments are off by default.
-	gotyface.DocHandler `json:"-" toml:"-" xml:"-" yaml:"-"`
+	gotyface.Docs `json:"-" toml:"-" xml:"-" yaml:"-"`
 }
 
 // Overrides is a map of go types to their typescript override values.
@@ -133,8 +133,8 @@ func (c *Config) setup() *Config {
 	c.GlobalOverrides.Type = ""
 	c.GlobalOverrides.Name = ""
 
-	if c.DocHandler == nil {
-		c.DocHandler = gotyface.NoDocs()
+	if c.Docs == nil {
+		c.Docs = gotyface.NoDocs()
 	}
 
 	return c

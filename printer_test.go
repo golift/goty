@@ -18,17 +18,6 @@ type TestWrapper struct {
 	Config *goty.Config
 }
 
-// Weekdays are cool.
-var Weekdays = []goty.Enum{
-	{Name: "Sunday", Value: time.Sunday},
-	{Name: "Monday", Value: time.Monday},
-	{Name: "Tuesday", Value: time.Tuesday},
-	{Name: "Wednesday", Value: time.Wednesday},
-	{Name: "Thursday", Value: time.Thursday},
-	{Name: "Friday", Value: time.Friday},
-	{Name: "Saturday", Value: time.Saturday},
-}
-
 type TestLevel1 struct {
 	Name string    `json:"name"`
 	Date time.Time `json:"date"`
@@ -40,8 +29,18 @@ type TestEndpoint struct {
 }
 
 func ExampleGoty_Print() {
+	weekdays := []goty.Enum{
+		{Name: "Sunday", Value: time.Sunday},
+		{Name: "Monday", Value: time.Monday},
+		{Name: "Tuesday", Value: time.Tuesday},
+		{Name: "Wednesday", Value: time.Wednesday},
+		{Name: "Thursday", Value: time.Thursday},
+		{Name: "Friday", Value: time.Friday},
+		{Name: "Saturday", Value: time.Saturday},
+	}
+
 	goty := goty.NewGoty(nil)
-	goty.Enums(Weekdays)
+	goty.Enums(weekdays)
 	goty.Parse(TestWrapper{})
 	goty.Print()
 	// Output:
