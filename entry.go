@@ -1,0 +1,170 @@
+// Package goty provides a way to convert Go structs to TypeScript interfaces.
+package goty
+
+import (
+	"reflect"
+	"slices"
+
+	"golift.io/goty/goatface"
+)
+
+const (
+	// DefaultTag is the tag name used to find struct member names.
+	DefaultTag = "json"
+)
+
+// UsePkgName is the behavior for the package name prefix being appended to the interface name.
+type UsePkgName uint8
+
+const (
+	// UsePkgNameOnConflict will prefix the typescript interface name with the package name
+	// if the interface name is already taken by another struct that had the same name.
+	// This is useful when you embed a lot of package.Config{} structs into your own struct.
+	// It's still possible to have conflicts, and those will have an integer suffix added.
+	// This is the default behavior.
+	UsePkgNameOnConflict UsePkgName = iota
+	// UsePkgNameNever will never prefix the typescript interface name with the package name.
+	// Conflicting names will have an integer suffix added.
+	UsePkgNameNever
+	// UsePkgNameAlways will always prefix the typescript interface name with the package name.
+	// Conflicting names will have an integer suffix added.
+	UsePkgNameAlways
+)
+
+// Config is the input config for the builder.
+type Config struct {
+	// Overrides is a map of go types to their typescript type and name.
+	// These override the global overrides.
+	Overrides Overrides
+	// GlobalOverrides are applied to all structs unless a type-specific override exists.
+	GlobalOverrides Override
+	// DocHandler is the handler for go/doc comments. Comments are off by default.
+	goatface.DocHandler
+}
+
+// Overrides is a map of go types to their typescript type and name.
+type Overrides map[any]Override
+
+// Override is a struct that contains the typescript type and name for a given go type.
+type Override struct {
+	// Typescript type. ie. string, number, boolean, etc.
+	// This has no effect when set inside a global override; it's type specific.
+	Type string
+	// Typescript interface name. This does not work on field names.
+	// This has no effect when set inside a global override; it's type specific.
+	Name string
+	// Setting optional to true will add a question mark to the typescript name.
+	// This has no effect when set inside a global override; it's type specific.
+	Optional bool
+	// Tag is the tag name to use for the struct member(s). Default is "json".
+	Tag string
+	// Comment is a comment to add to the typescript interface.
+	Comment string
+	// Setting KeepBadChars to true will keep bad characters in the typescript name.
+	// These include dashes, periods,slashes, etc.
+	KeepBadChars bool
+	// Setting KeepUnderscores to true will keep underscores in the typescript name.
+	KeepUnderscores bool
+	// Setting UsePkgName to true will prefix the typescript interface name with the package name.
+	UsePkgName UsePkgName
+	// By default all typescript interfaces are exported. Set NoExport to true to prevent that.
+	NoExport bool
+	// Namer is a function that can be used to customize the typescript interface name.
+	// Use this to add a prefix, suffix or any custom name changes you wish.
+	Namer func(refType reflect.Type, currentName string) string
+}
+
+// NewGoty creates a new Goty instance to build typescript interfaces from go structs.
+// If config is nil, it will be initialized to an empty Override.
+func NewGoty(config *Config) *Goty {
+	return &Goty{
+		structNames: make(map[string]bool),
+		structTypes: make(map[reflect.Type]*DataStruct),
+		config:      config.setup(),
+		output:      make([]*DataStruct, 0),
+		pkgPaths:    make(map[string]struct{}),
+	}
+}
+
+// Values returns the output of the builder.
+// These are raw values that can be used to generate typescript interfaces.
+// Only useful after calling .Enums() or .Parse().
+func (g *Goty) Values() []*DataStruct {
+	return g.output
+}
+
+// Pkgs returns the list of package paths that we have parsed.
+// This is useful when you parse docs after you parse structs.
+func (g *Goty) Pkgs() []string {
+	output := make([]string, len(g.pkgPaths))
+	idx := 0
+
+	for pkg := range g.pkgPaths {
+		output[idx] = pkg
+		idx++
+	}
+
+	slices.Sort(output)
+
+	return output
+}
+
+func getType(fld any) reflect.Type {
+	switch t := fld.(type) {
+	case reflect.Type:
+		return t
+	default:
+		return reflect.TypeOf(fld)
+	}
+}
+
+// setup converts the override map[any]string to map[reflect.Type]string.
+// This is done because the override map is more flexible, allowing
+// for overrides by base type or by reflect.Type.
+func (c *Config) setup() *Config {
+	if c == nil {
+		c = &Config{}
+	}
+
+	c.GlobalOverrides.setup()
+	// These are not used in global overrides, make that more obvious.
+	c.GlobalOverrides.Type = ""
+	c.GlobalOverrides.Name = ""
+
+	if c.DocHandler == nil {
+		c.DocHandler = goatface.NoDocs()
+	}
+
+	return c
+}
+
+// setup makes sure an override has a tag value.
+func (o *Override) setup() *Override {
+	if o.Tag == "" {
+		o.Tag = DefaultTag // "json"
+	}
+
+	if o.UsePkgName == 0 {
+		o.UsePkgName = UsePkgNameOnConflict // explicit.
+	}
+
+	if o.Namer == nil {
+		o.Namer = func(_ reflect.Type, name string) string {
+			return name
+		}
+	}
+
+	return o
+}
+
+// override returns the override for a given type.
+// If there is no override for the type, the global override is returned.
+func (c *Config) override(typ reflect.Type) *Override {
+	for loop, override := range c.Overrides {
+		if t := getType(loop); t == typ {
+			return override.setup()
+		}
+	}
+
+	return &c.GlobalOverrides
+}
