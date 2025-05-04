@@ -229,14 +229,19 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 			}
 		}
 
-		if elem.Anonymous && (elem.Type.Kind() == reflect.Struct ||
-			elem.Type.Kind() == reflect.Ptr && elem.Type.Elem().Kind() == reflect.Struct) {
-			// Extend the parent struct with a new struct.
-			data.Extends = append(data.Extends, member.Type)
-		} else {
-			// Add a member to the parent struct.
-			data.Members = append(data.Members, member)
-		}
+		data.addMember(member)
+	}
+}
+
+// addMember adds a member to the struct.
+// If the member is an anonymous struct, it extends the parent struct.
+// Otherwise, it adds the member to the struct.
+func (d *DataStruct) addMember(member *StructMember) {
+	if member.Member.Anonymous && (member.Member.Type.Kind() == reflect.Struct ||
+		member.Member.Type.Kind() == reflect.Ptr && member.Member.Type.Elem().Kind() == reflect.Struct) {
+		d.Extends = append(d.Extends, member.Type)
+	} else {
+		d.Members = append(d.Members, member)
 	}
 }
 
