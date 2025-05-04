@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	"golift.io/goty/goatface"
+	"golift.io/goty/gotyface"
 )
 
 // Goty is the main struct for the builder.
@@ -22,23 +22,27 @@ type Goty struct {
 	// structTypes is a map of struct types to their typescript interface names.
 	// We keep track by type so if a struct is embedded twice, it only gets saved once.
 	structTypes map[reflect.Type]*DataStruct
+	// pkgPaths is a list of package paths that we have parsed.
+	// This is so you can parse docs after you parse structs.
+	pkgPaths map[string]struct{}
 	// output is what we build up as we parse the input struct(s).
 	// We use a slice to preserve the order of the input structs.
 	// Otherwise we could just use the structTypes map.
 	output []*DataStruct
-	// pkgPaths is a list of package paths that we have parsed.
-	// This is so you can parse docs after you parse structs.
-	pkgPaths map[string]struct{}
 }
 
 // DataStruct is the internal representation of a typescript interface
 // that we build up as we parse the input struct(s).
 type DataStruct struct {
+	// Type is the go struct type that we are building the typescript interface for.
+	Type reflect.Type
+	// doc is the documentation handler to find docs for this struct and its members.
+	doc gotyface.DocHandler
+	// Overrides for this struct.
+	ovr *Override
 	// Name is generated from the struct name and package path, or from an override.
 	// name is also the "type" where this is a member of a typescript interface.
 	Name string
-	// Type is the go struct type that we are building the typescript interface for.
-	Type reflect.Type
 	// GoName is the full import path and name of the struct.
 	GoName string
 	// Members is a list of members in the struct, each with their own configuration.
@@ -50,25 +54,26 @@ type DataStruct struct {
 	// Extends is a list of struct names that this struct extends.
 	// This happens when a struct is anonymously embedded in another struct.
 	Extends []string
-	// doc us the documentation handler to find docs for this struct and its members.
-	doc goatface.DocHandler
-	// Overrides for this struct.
-	ovr *Override
 }
 
 // StructMember is the internal representation of a member of a typescript interface.
 type StructMember struct {
-	Name     string
-	Type     string
-	Optional bool
-	GoName   string
-	Member   reflect.StructField
-	// Members is a list of members in this member if it's an anonymous struct.
-	Members []*StructMember
 	// doc, Member and parent are used to find the documentation for the member.
-	doc    goatface.DocHandler
+	doc    gotyface.DocHandler
 	parent *DataStruct
 	ovr    *Override
+	// Name is the name of the member.
+	Name string
+	// Type is the typescript type of the member. Usually string, number, boolean, etc.
+	Type string
+	// GoName is the full import path and name of the member.
+	GoName string
+	// Members is a list of members in this member if it's an anonymous struct.
+	Members []*StructMember
+	// Member is the struct field that we are building the typescript interface for.
+	Member reflect.StructField
+	// Optional is true if the member is optional.
+	Optional bool
 }
 
 // Enum is used as an input to the Enum method.
@@ -77,10 +82,10 @@ type StructMember struct {
 // Do not mix enums, add each enum separately.
 // Enums have no type. But maybe they could?
 type Enum struct {
-	// Name of the enum.
-	Name string
 	// Value of the enum.
 	Value any
+	// Name of the enum.
+	Name string
 }
 
 // Parse parses a struct and adds it to the builder.
