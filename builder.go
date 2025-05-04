@@ -37,7 +37,7 @@ type DataStruct struct {
 	// Type is the go struct type that we are building the typescript interface for.
 	Type reflect.Type
 	// doc is the documentation handler to find docs for this struct and its members.
-	doc gotyface.DocHandler
+	doc gotyface.Docs
 	// Overrides for this struct.
 	ovr *Override
 	// Name is generated from the struct name and package path, or from an override.
@@ -59,15 +59,13 @@ type DataStruct struct {
 // StructMember is the internal representation of a member of a typescript interface.
 type StructMember struct {
 	// doc, Member and parent are used to find the documentation for the member.
-	doc    gotyface.DocHandler
+	doc    gotyface.Docs
 	parent *DataStruct
 	ovr    *Override
 	// Name is the name of the member.
 	Name string
 	// Type is the typescript type of the member. Usually string, number, boolean, etc.
 	Type string
-	// GoName is the full import path and name of the member.
-	GoName string
 	// Members is a list of members in this member if it's an anonymous struct.
 	Members []*StructMember
 	// Member is the struct field that we are building the typescript interface for.
@@ -115,32 +113,33 @@ func (g *Goty) Parse(elems ...any) *Goty {
 func (g *Goty) Enums(enums ...[]Enum) *Goty {
 	for _, enum := range enums {
 		if enum != nil {
-			g.enums(enum)
+			g.enum(enum)
 		}
 	}
 
 	return g
 }
 
-func (g *Goty) enums(enum []Enum) {
-	data := &DataStruct{
-		Elements: make([]*Enum, len(enum)),
-		doc:      g.config.DocHandler,
+func (g *Goty) enum(enum []Enum) {
+	var typ reflect.Type
+	// Find the name of the Enum by looking at the type of the first value.
+	for _, e := range enum {
+		typ = reflect.TypeOf(e.Value)
+		break
 	}
 
-	// Find the name of the Enum by looking at the type of the first value.
-	for _, v := range enum {
-		data.Type = reflect.TypeOf(v.Value)
-		data.Name = g.getStructName(data.Type)
-		data.GoName = data.Type.PkgPath() + "." + data.Type.Name()
-		data.ovr = g.config.override(data.Type)
+	data := &DataStruct{
+		Elements: make([]*Enum, len(enum)),
+		doc:      g.config,
+		Type:     typ,
+		Name:     g.getStructName(typ),
+		GoName:   typ.PkgPath() + "." + typ.Name(),
+		ovr:      g.config.override(typ),
+	}
 
-		if g.structNames[data.Name] {
-			panic("cannot find a suitable struct name for " +
-				data.Type.PkgPath() + "." + data.Type.Name() + ": " + data.Name)
-		}
-
-		break //nolint:staticcheck // We only need the first enum.
+	if g.structNames[data.Name] {
+		panic("cannot find a suitable struct name for " +
+			data.Type.PkgPath() + "." + data.Type.Name() + ": " + data.Name)
 	}
 
 	// Convert the enum values to a typescript values using json Marshaller.
@@ -177,7 +176,7 @@ func (g *Goty) parseStruct(elem reflect.Type) *DataStruct {
 		Type:    elem,
 		GoName:  elem.PkgPath() + "." + elem.Name(),
 		Members: make([]*StructMember, 0),
-		doc:     g.config.DocHandler,
+		doc:     g.config,
 		ovr:     g.config.override(elem),
 	}
 
@@ -210,18 +209,16 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 		}
 
 		member := &StructMember{
-			Name:   g.stripBadChars(name, elem.Type),
-			doc:    g.config.DocHandler, // hard to attach this later.
-			Member: elem,
-			parent: data,
-			ovr:    ovr,
+			Name:     g.stripBadChars(name, elem.Type),
+			doc:      g.config, // hard to attach this later.
+			Member:   elem,
+			parent:   data,
+			ovr:      ovr,
+			Optional: ovr.Optional,
+			Type:     ovr.Type,
 		}
 
-		// Apply any 'type' overrides.
-		if ovr.Type != "" {
-			member.Type = ovr.Type
-			member.Optional = ovr.Optional
-		} else {
+		if member.Type == "" {
 			// We only parse the member if it didn't have a type override.
 			member.Type, member.Optional = g.parseMember(data, elem.Type, member)
 		}
@@ -419,7 +416,7 @@ func (g *Goty) stripBadChars(name string, typ reflect.Type) string {
 
 	for _, r := range name {
 		if !strings.ContainsRune(charsToRemove, r) {
-			output.WriteRune(r)
+			_, _ = output.WriteRune(r)
 		}
 	}
 

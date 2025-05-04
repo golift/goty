@@ -5,8 +5,8 @@ package gotyface
 
 import "reflect"
 
-// DocHandler allows pulling go/doc comments into typescript as JSDoc.
-type DocHandler interface {
+// Docs allows pulling go/doc comments into typescript as JSDoc.
+type Docs interface {
 	// Type retrieves documentation for a type
 	Type(t reflect.Type) string
 

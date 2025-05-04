@@ -4,20 +4,20 @@ linters:
   disable:
     - nlreturn
     - exhaustruct
-    - depguard
-  exclusions:
-    rules:
-      - path: "printer.go"
-        linters:
-          - forbidigo
-          - errcheck
-      - path: ".*_test.go"
-        linters:
-          - gochecknoglobals
-      - path: "cmd/"
-        linters:
-          - gochecknoglobals
-
+  settings:
+    errcheck:
+      disable-default-exclusions: true
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintln
+        - fmt.Fprintf
+        - (*os.File).Close
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - golift.io
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
