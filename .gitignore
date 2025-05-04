@@ -1,2 +1,4 @@
 *.ts
 /cmd
+/vendor
+/go.sum

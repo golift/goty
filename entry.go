@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"slices"
 
-	"golift.io/goty/goatface"
+	"golift.io/goty/gotyface"
 )
 
 const (
@@ -35,44 +35,48 @@ const (
 type Config struct {
 	// Overrides is a map of go types to their typescript type and name.
 	// These override the global overrides.
-	Overrides Overrides
+	Overrides Overrides `json:"overrides" toml:"overrides" xml:"overrides" yaml:"overrides"`
 	// GlobalOverrides are applied to all structs unless a type-specific override exists.
-	GlobalOverrides Override
+	GlobalOverrides Override `json:"globalOverrides" toml:"global_overrides" xml:"global-override" yaml:"globalOverrides"`
 	// DocHandler is the handler for go/doc comments. Comments are off by default.
-	goatface.DocHandler
+	gotyface.DocHandler `json:"-" toml:"-" xml:"-" yaml:"-"`
 }
 
-// Overrides is a map of go types to their typescript type and name.
+// Overrides is a map of go types to their typescript override values.
 type Overrides map[any]Override
 
-// Override is a struct that contains the typescript type and name for a given go type.
+// Override is a struct that contains overrides for either a specific type or for all types (when global).
 type Override struct {
-	// Typescript type. ie. string, number, boolean, etc.
-	// This has no effect when set inside a global override; it's type specific.
-	Type string
-	// Typescript interface name. This does not work on field names.
-	// This has no effect when set inside a global override; it's type specific.
-	Name string
-	// Setting optional to true will add a question mark to the typescript name.
-	// This has no effect when set inside a global override; it's type specific.
-	Optional bool
-	// Tag is the tag name to use for the struct member(s). Default is "json".
-	Tag string
-	// Comment is a comment to add to the typescript interface.
-	Comment string
-	// Setting KeepBadChars to true will keep bad characters in the typescript name.
-	// These include dashes, periods,slashes, etc.
-	KeepBadChars bool
-	// Setting KeepUnderscores to true will keep underscores in the typescript name.
-	KeepUnderscores bool
-	// Setting UsePkgName to true will prefix the typescript interface name with the package name.
-	UsePkgName UsePkgName
-	// By default all typescript interfaces are exported. Set NoExport to true to prevent that.
-	NoExport bool
 	// Namer is a function that can be used to customize the typescript interface name.
 	// Use this to add a prefix, suffix or any custom name changes you wish.
-	Namer func(refType reflect.Type, currentName string) string
+	Namer Namer `json:"-" toml:"-" xml:"-" yaml:"-"`
+	// Typescript type. ie. string, number, boolean, etc.
+	// This has no effect when set inside a global override; it's type specific.
+	Type string `json:"type" toml:"type" xml:"type" yaml:"type"`
+	// Typescript interface name. This does not work on field names.
+	// This has no effect when set inside a global override; it's type specific.
+	Name string `json:"name" toml:"name" xml:"name" yaml:"name"`
+	// Tag is the tag name to use for the struct member(s). Default is "json".
+	Tag string `json:"tag" toml:"tag" xml:"tag" yaml:"tag"`
+	// Comment is a comment to add to the typescript interface.
+	Comment string `json:"comment" toml:"comment" xml:"comment" yaml:"comment"`
+	// Setting optional to true will add a question mark to the typescript name.
+	// This has no effect when set inside a global override; it's type specific.
+	Optional bool `json:"optional" toml:"optional" xml:"optional" yaml:"optional"`
+	// Setting KeepBadChars to true will keep bad characters in the typescript name.
+	// These include pretty much all those characters on the number keys on your keyboard.
+	KeepBadChars bool `json:"keepBadChars" toml:"keep_bad_chars" xml:"keep-bad-chars" yaml:"keepBadChars"`
+	// Setting KeepUnderscores to true will keep underscores in the typescript name.
+	// Unlike other characters, underscores are valid. They are still removed by default.
+	KeepUnderscores bool `json:"keepUnderscores" toml:"keep_underscores" xml:"keep-underscores" yaml:"keepUnderscores"`
+	// Configure the UsePkgName value to control how typescript interface names are generated.
+	UsePkgName UsePkgName `json:"usePkgName" toml:"use_pkg_name" xml:"use-pkg-name" yaml:"usePkgName"`
+	// By default all typescript interfaces are exported. Set NoExport to true to prevent that.
+	NoExport bool `json:"noExport" toml:"no_export" xml:"no-export" yaml:"noExport"`
 }
+
+// Namer is an interface that allows external interface naming.
+type Namer func(refType reflect.Type, currentName string) string
 
 // NewGoty creates a new Goty instance to build typescript interfaces from go structs.
 // If config is nil, it will be initialized to an empty Override.
@@ -88,13 +92,13 @@ func NewGoty(config *Config) *Goty {
 
 // Values returns the output of the builder.
 // These are raw values that can be used to generate typescript interfaces.
-// Only useful after calling .Enums() or .Parse().
+// Only useful after calling .Enums() and/or .Parse().
 func (g *Goty) Values() []*DataStruct {
 	return g.output
 }
 
 // Pkgs returns the list of package paths that we have parsed.
-// This is useful when you parse docs after you parse structs.
+// This is useful for parsing docs after parsing structs.
 func (g *Goty) Pkgs() []string {
 	output := make([]string, len(g.pkgPaths))
 	idx := 0
@@ -118,9 +122,7 @@ func getType(fld any) reflect.Type {
 	}
 }
 
-// setup converts the override map[any]string to map[reflect.Type]string.
-// This is done because the override map is more flexible, allowing
-// for overrides by base type or by reflect.Type.
+// setup makes sure the config is initialized and all defaults are set in the global override.
 func (c *Config) setup() *Config {
 	if c == nil {
 		c = &Config{}
@@ -132,13 +134,14 @@ func (c *Config) setup() *Config {
 	c.GlobalOverrides.Name = ""
 
 	if c.DocHandler == nil {
-		c.DocHandler = goatface.NoDocs()
+		c.DocHandler = gotyface.NoDocs()
 	}
 
 	return c
 }
 
 // setup makes sure an override has a tag value.
+// Other default override options are initially validated and configured here.
 func (o *Override) setup() *Override {
 	if o.Tag == "" {
 		o.Tag = DefaultTag // "json"

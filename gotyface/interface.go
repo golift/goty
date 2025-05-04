@@ -1,7 +1,7 @@
-// Package goatface holds the documentation interface for the goty packages.
+// Package gotyface holds the documentation interface for the goty packages.
 // It's a simple interface that allows you to pull go/doc comments into typescript as JSDoc.
 // Stored in a standalone package to avoid circular imports.
-package goatface
+package gotyface
 
 import "reflect"
 

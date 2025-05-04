@@ -1,4 +1,4 @@
-package goatface
+package gotyface
 
 import "reflect"
 

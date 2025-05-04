@@ -8,10 +8,11 @@ import (
 	"strings"
 )
 
-const header = `/* Auto-generated. DO NOT EDIT. Generator: https://golift.io/goty
+// Header is printed before anything else.
+const Header = `/* Auto-generated. DO NOT EDIT. Generator: https://golift.io/goty
  * Edit the source code and run goty again to make updates.` + "\n */\n\n"
 
-// ErrNoStructs is returned if no structs are found to write.
+// ErrNoStructs is returned if no structs are found to print or write.
 var ErrNoStructs = errors.New("no structs to write, run Parse() first")
 
 // Print prints all the structs in the output to stdout as typescript interfaces.
@@ -41,7 +42,7 @@ func (g *Goty) Write(fileName string, overwrite bool) error {
 	return nil
 }
 
-// Print prints a struct as a typescript interface.
+// Print a struct as a typescript interface to an io.Writer.
 func (s *DataStruct) Print(indent string, output io.Writer) {
 	golangRef := "\n * @see golang: <" + s.GoName + ">"
 	doc := formatDocs(false, indent, s.doc.Type(s.Type), s.ovr.Comment)
@@ -107,7 +108,7 @@ func (g *Goty) print(output io.Writer) {
 		panic(ErrNoStructs)
 	}
 
-	fmt.Fprint(output, header)
+	fmt.Fprint(output, Header)
 
 	for _, s := range g.output {
 		s.Print("", output)
@@ -119,8 +120,8 @@ func (g *Goty) print(output io.Writer) {
 
 	fmt.Fprintln(output, "// Packages parsed:")
 
-	for _, pkg := range g.Pkgs() {
-		fmt.Fprintln(output, "// - "+pkg)
+	for idx, pkg := range g.Pkgs() {
+		fmt.Fprintf(output, "// %3d. %s\n", idx+1, pkg)
 	}
 }
 
