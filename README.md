@@ -1,3 +1,5 @@
+<center><img src="https://raw.githubusercontent.com/wiki/golift/goty/goty.png"></center>
+
 # golift.io/goty
 
 Transform go structs into typescript interfaces.
