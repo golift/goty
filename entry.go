@@ -42,10 +42,10 @@ type Config struct {
 	goatface.DocHandler
 }
 
-// Overrides is a map of go types to their typescript type and name.
+// Overrides is a map of go types to their typescript override values.
 type Overrides map[any]Override
 
-// Override is a struct that contains the typescript type and name for a given go type.
+// Override is a struct that contains overrides for either a specific type or for all types (when global).
 type Override struct {
 	// Typescript type. ie. string, number, boolean, etc.
 	// This has no effect when set inside a global override; it's type specific.
@@ -61,11 +61,12 @@ type Override struct {
 	// Comment is a comment to add to the typescript interface.
 	Comment string
 	// Setting KeepBadChars to true will keep bad characters in the typescript name.
-	// These include dashes, periods,slashes, etc.
+	// These include pretty much all those characters on the number keys on your keyboard.
 	KeepBadChars bool
 	// Setting KeepUnderscores to true will keep underscores in the typescript name.
+	// Unlike other characters, underscores are valid. They are still removed by default.
 	KeepUnderscores bool
-	// Setting UsePkgName to true will prefix the typescript interface name with the package name.
+	// Configure the UsePkgName value to control how typescript interface names are generated.
 	UsePkgName UsePkgName
 	// By default all typescript interfaces are exported. Set NoExport to true to prevent that.
 	NoExport bool
@@ -88,13 +89,13 @@ func NewGoty(config *Config) *Goty {
 
 // Values returns the output of the builder.
 // These are raw values that can be used to generate typescript interfaces.
-// Only useful after calling .Enums() or .Parse().
+// Only useful after calling .Enums() and/or .Parse().
 func (g *Goty) Values() []*DataStruct {
 	return g.output
 }
 
 // Pkgs returns the list of package paths that we have parsed.
-// This is useful when you parse docs after you parse structs.
+// This is useful for parsing docs after parsing structs.
 func (g *Goty) Pkgs() []string {
 	output := make([]string, len(g.pkgPaths))
 	idx := 0
@@ -118,9 +119,7 @@ func getType(fld any) reflect.Type {
 	}
 }
 
-// setup converts the override map[any]string to map[reflect.Type]string.
-// This is done because the override map is more flexible, allowing
-// for overrides by base type or by reflect.Type.
+// setup makes sure the config is initialized and all defaults are set in the global override.
 func (c *Config) setup() *Config {
 	if c == nil {
 		c = &Config{}
@@ -139,6 +138,7 @@ func (c *Config) setup() *Config {
 }
 
 // setup makes sure an override has a tag value.
+// Other default override options are initially validated and configured here.
 func (o *Override) setup() *Override {
 	if o.Tag == "" {
 		o.Tag = DefaultTag // "json"

@@ -13,14 +13,15 @@ import (
 // Goty is the main struct for the builder.
 // It's used to build typescript interfaces from go structs.
 type Goty struct {
-	// structNames is a map of typescript interface names to their struct data..
-	// We keep track by name to ensure every struct gets a unique name.
+	// config is the config input for the builder.
+	// Everything else in this struct is output.
+	config *Config
+	// structNames is a list of unique typescript interface names.
+	// We keep track by name to ensure every interface gets a unique name.
 	structNames map[string]bool
 	// structTypes is a map of struct types to their typescript interface names.
 	// We keep track by type so if a struct is embedded twice, it only gets saved once.
 	structTypes map[reflect.Type]*DataStruct
-	// config is the config input for the builder.
-	config *Config
 	// output is what we build up as we parse the input struct(s).
 	// We use a slice to preserve the order of the input structs.
 	// Otherwise we could just use the structTypes map.
@@ -49,7 +50,7 @@ type DataStruct struct {
 	// Extends is a list of struct names that this struct extends.
 	// This happens when a struct is anonymously embedded in another struct.
 	Extends []string
-	// Doc is the documentation for the struct.
+	// doc us the documentation handler to find docs for this struct and its members.
 	doc goatface.DocHandler
 	// Overrides for this struct.
 	ovr *Override
@@ -64,7 +65,7 @@ type StructMember struct {
 	Member   reflect.StructField
 	// Members is a list of members in this member if it's an anonymous struct.
 	Members []*StructMember
-	// doc, member and parent are used to find the documentation for the member.
+	// doc, Member and parent are used to find the documentation for the member.
 	doc    goatface.DocHandler
 	parent *DataStruct
 	ovr    *Override
@@ -73,6 +74,7 @@ type StructMember struct {
 // Enum is used as an input to the Enum method.
 // Use this to add an enum to the builder.
 // Enums should be added before parsing the structs that use them.
+// Do not mix enums, add each enum separately.
 // Enums have no type. But maybe they could?
 type Enum struct {
 	// Name of the enum.
@@ -82,31 +84,47 @@ type Enum struct {
 }
 
 // Parse parses a struct and adds it to the builder.
-func (g *Goty) Parse(elem any) *Goty {
-	typ := getType(elem)
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
+func (g *Goty) Parse(elems ...any) *Goty {
+	for _, elem := range elems {
+		if elem == nil {
+			continue
+		}
 
-	if typ.Kind() != reflect.Struct {
-		panic("expected a struct, got " + typ.String())
-	}
+		typ := getType(elem)
+		if typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
 
-	g.parseStruct(typ)
+		if typ.Kind() != reflect.Struct {
+			panic("expected a struct, got " + typ.String())
+		}
+
+		g.parseStruct(typ)
+	}
 
 	return g
 }
 
-// Enums adds an enum to the builder. The input is enum name and value pairs.
+// Enums adds enums to the builder. The input is enum name and value pairs.
 // Add enums before parsing the structs that use them.
-func (g *Goty) Enums(enums []Enum) *Goty {
+func (g *Goty) Enums(enums ...[]Enum) *Goty {
+	for _, enum := range enums {
+		if enum != nil {
+			g.enums(enum)
+		}
+	}
+
+	return g
+}
+
+func (g *Goty) enums(enum []Enum) {
 	data := &DataStruct{
-		Elements: make([]*Enum, len(enums)),
+		Elements: make([]*Enum, len(enum)),
 		doc:      g.config.DocHandler,
 	}
 
 	// Find the name of the Enum by looking at the type of the first value.
-	for _, v := range enums {
+	for _, v := range enum {
 		data.Type = reflect.TypeOf(v.Value)
 		data.Name = g.getStructName(data.Type)
 		data.GoName = data.Type.PkgPath() + "." + data.Type.Name()
@@ -121,7 +139,7 @@ func (g *Goty) Enums(enums []Enum) *Goty {
 	}
 
 	// Convert the enum values to a typescript values using json Marshaller.
-	for idx, enum := range enums {
+	for idx, enum := range enum {
 		str, err := json.Marshal(enum.Value)
 		if err != nil {
 			panic("cannot marshal enum value: " + err.Error())
@@ -133,8 +151,6 @@ func (g *Goty) Enums(enums []Enum) *Goty {
 	g.structTypes[data.Type] = data
 	g.structNames[data.Name] = true
 	g.output = append(g.output, data)
-
-	return g
 }
 
 // parseStruct adds a struct to the builder if it doesn't already exist.
@@ -223,6 +239,7 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 
 // parseMember returns the typescript type for a given go type.
 // It also returns a boolean indicating if the type is optional.
+// Fully recursive.
 //
 //nolint:cyclop // This is a complex function, but really it's not that bad.
 func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *StructMember) (string, bool) {
@@ -308,6 +325,7 @@ func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *Struct
 
 // parseMap returns the typescript type for a given go map.
 func (g *Goty) parseMap(parent *DataStruct, field reflect.Type, member *StructMember) string {
+	// Parse both sides of tha map.
 	key, keyOptional := g.parseMember(parent, field.Key(), member)
 	val, valOptional := g.parseMember(parent, field.Elem(), member)
 

@@ -417,20 +417,20 @@ export interface NotiPlexConfig0 {
 };
 
 // Packages parsed:
-// - github.com/Notifiarr/notifiarr/pkg/apps
-// - github.com/Notifiarr/notifiarr/pkg/apps/apppkg/plex
-// - github.com/Notifiarr/notifiarr/pkg/apps/apppkg/sabnzbd
-// - github.com/Notifiarr/notifiarr/pkg/apps/apppkg/tautulli
-// - github.com/Notifiarr/notifiarr/pkg/configfile
-// - github.com/Notifiarr/notifiarr/pkg/logs
-// - github.com/Notifiarr/notifiarr/pkg/services
-// - github.com/Notifiarr/notifiarr/pkg/snapshot
-// - github.com/Notifiarr/notifiarr/pkg/triggers/commands
-// - github.com/Notifiarr/notifiarr/pkg/triggers/commands/cmdconfig
-// - github.com/Notifiarr/notifiarr/pkg/triggers/common/scheduler
-// - github.com/Notifiarr/notifiarr/pkg/triggers/endpoints/epconfig
-// - github.com/Notifiarr/notifiarr/pkg/triggers/filewatch
-// - golift.io/deluge
-// - golift.io/nzbget
-// - golift.io/qbit
-// - golift.io/starr
+//   1. github.com/Notifiarr/notifiarr/pkg/apps
+//   2. github.com/Notifiarr/notifiarr/pkg/apps/apppkg/plex
+//   3. github.com/Notifiarr/notifiarr/pkg/apps/apppkg/sabnzbd
+//   4. github.com/Notifiarr/notifiarr/pkg/apps/apppkg/tautulli
+//   5. github.com/Notifiarr/notifiarr/pkg/configfile
+//   6. github.com/Notifiarr/notifiarr/pkg/logs
+//   7. github.com/Notifiarr/notifiarr/pkg/services
+//   8. github.com/Notifiarr/notifiarr/pkg/snapshot
+//   9. github.com/Notifiarr/notifiarr/pkg/triggers/commands
+//  10. github.com/Notifiarr/notifiarr/pkg/triggers/commands/cmdconfig
+//  11. github.com/Notifiarr/notifiarr/pkg/triggers/common/scheduler
+//  12. github.com/Notifiarr/notifiarr/pkg/triggers/endpoints/epconfig
+//  13. github.com/Notifiarr/notifiarr/pkg/triggers/filewatch
+//  14. golift.io/deluge
+//  15. golift.io/nzbget
+//  16. golift.io/qbit
+//  17. golift.io/starr
