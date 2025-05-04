@@ -189,13 +189,15 @@ I even edit all the packages in the starr module to add `json:"-"` to all the em
 `starr.APIer` interface members. Added a `replace` to go.mod and tried again. I got the same panic.
 Double-checked I saved all the files. At this point I don't know if it's failing because it
 doesn't respect the json tag or if I missed one _somewhere else_. It's not giving me enough
-info in the panic. Welp.
+info in the panic. Whelp.
 
 There are 3 open pull requests that are years old at this point. The library hasn't been touched
 in 6 years, so I have low hopes of the maintainer accepting more contributions. While this
 is full featured and looks well put together, I'm afraid it's progress has stalled.
 
-I really wish this one was maintained because it felt like a good option. I could have forked it, but it's a massive codebase and would take me a long time to familiarize myself. It's sad because it even supports go/doc. Something I've
+I really wish this one was maintained because it felt like a good option.
+I could have forked it, but it's a massive codebase and would take me a long
+time to familiarize myself. It's sad because it even supports go/doc. Something I've
 never ventured into and want Goty to support. I will probably come back here for
 some ideas.
 
@@ -223,7 +225,7 @@ func main() {
 
 ### [OneOfOne/struct2ts](https://github.com/OneOfOne/struct2ts)
 
-This one doesn't show an example of how to use it as a module/libary,
+This one doesn't show an example of how to use it as a module/library,
 only how to run a binary. So I looked in a test file. Seems easy enough.
 
 With default options it gave me some hefty output containing lots of functions
