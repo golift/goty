@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"strings"
 
-	"golift.io/goty/goatface"
+	"golift.io/goty/gotyface"
 )
 
 /* Lifted from here:
@@ -137,4 +137,4 @@ func (d *Docs) findDoc(typ reflect.Type) *doc.Type {
 }
 
 // Validate the interface implementation.
-var _ goatface.DocHandler = &Docs{}
+var _ gotyface.DocHandler = &Docs{}
