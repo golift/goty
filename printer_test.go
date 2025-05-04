@@ -106,9 +106,9 @@ func ExampleGoty_Print() {
 	// export interface Override {
 	//   type: string;
 	//   name: string;
-	//   optional: boolean;
 	//   tag: string;
 	//   comment: string;
+	//   optional: boolean;
 	//   keepBadChars: boolean;
 	//   keepUnderscores: boolean;
 	//   usePkgName: number;
