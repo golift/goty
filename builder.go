@@ -227,7 +227,7 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 			}
 		}
 
-		if elem.Anonymous {
+		if elem.Anonymous && elem.Type.Kind() == reflect.Struct {
 			// Extend the parent struct with a new struct.
 			data.Extends = append(data.Extends, member.Type)
 		} else {
@@ -325,7 +325,7 @@ func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *Struct
 
 // parseMap returns the typescript type for a given go map.
 func (g *Goty) parseMap(parent *DataStruct, field reflect.Type, member *StructMember) string {
-	// Parse both sides of tha map.
+	// Parse both sides of the map.
 	key, keyOptional := g.parseMember(parent, field.Key(), member)
 	val, valOptional := g.parseMember(parent, field.Elem(), member)
 

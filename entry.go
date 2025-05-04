@@ -35,11 +35,11 @@ const (
 type Config struct {
 	// Overrides is a map of go types to their typescript type and name.
 	// These override the global overrides.
-	Overrides Overrides
+	Overrides Overrides `json:"overrides" toml:"overrides" xml:"overrides" yaml:"overrides"`
 	// GlobalOverrides are applied to all structs unless a type-specific override exists.
-	GlobalOverrides Override
+	GlobalOverrides Override `json:"globalOverrides" toml:"global_overrides" xml:"global-override" yaml:"globalOverrides"`
 	// DocHandler is the handler for go/doc comments. Comments are off by default.
-	goatface.DocHandler
+	goatface.DocHandler `json:"-" toml:"-" xml:"-" yaml:"-"`
 }
 
 // Overrides is a map of go types to their typescript override values.
@@ -49,31 +49,34 @@ type Overrides map[any]Override
 type Override struct {
 	// Typescript type. ie. string, number, boolean, etc.
 	// This has no effect when set inside a global override; it's type specific.
-	Type string
+	Type string `json:"type" toml:"type" xml:"type" yaml:"type"`
 	// Typescript interface name. This does not work on field names.
 	// This has no effect when set inside a global override; it's type specific.
-	Name string
+	Name string `json:"name" toml:"name" xml:"name" yaml:"name"`
 	// Setting optional to true will add a question mark to the typescript name.
 	// This has no effect when set inside a global override; it's type specific.
-	Optional bool
+	Optional bool `json:"optional" toml:"optional" xml:"optional" yaml:"optional"`
 	// Tag is the tag name to use for the struct member(s). Default is "json".
-	Tag string
+	Tag string `json:"tag" toml:"tag" xml:"tag" yaml:"tag"`
 	// Comment is a comment to add to the typescript interface.
-	Comment string
+	Comment string `json:"comment" toml:"comment" xml:"comment" yaml:"comment"`
 	// Setting KeepBadChars to true will keep bad characters in the typescript name.
 	// These include pretty much all those characters on the number keys on your keyboard.
-	KeepBadChars bool
+	KeepBadChars bool `json:"keepBadChars" toml:"keep_bad_chars" xml:"keep-bad-chars" yaml:"keepBadChars"`
 	// Setting KeepUnderscores to true will keep underscores in the typescript name.
 	// Unlike other characters, underscores are valid. They are still removed by default.
-	KeepUnderscores bool
+	KeepUnderscores bool `json:"keepUnderscores" toml:"keep_underscores" xml:"keep-underscores" yaml:"keepUnderscores"`
 	// Configure the UsePkgName value to control how typescript interface names are generated.
-	UsePkgName UsePkgName
+	UsePkgName UsePkgName `json:"usePkgName" toml:"use_pkg_name" xml:"use-pkg-name" yaml:"usePkgName"`
 	// By default all typescript interfaces are exported. Set NoExport to true to prevent that.
-	NoExport bool
+	NoExport bool `json:"noExport" toml:"no_export" xml:"no-export" yaml:"noExport"`
 	// Namer is a function that can be used to customize the typescript interface name.
 	// Use this to add a prefix, suffix or any custom name changes you wish.
-	Namer func(refType reflect.Type, currentName string) string
+	Namer Namer `json:"-" toml:"-" xml:"-" yaml:"-"`
 }
+
+// Namer is an interface that allows external interface naming.
+type Namer func(refType reflect.Type, currentName string) string
 
 // NewGoty creates a new Goty instance to build typescript interfaces from go structs.
 // If config is nil, it will be initialized to an empty Override.
