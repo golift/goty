@@ -66,8 +66,6 @@ type StructMember struct {
 	Name string
 	// Type is the typescript type of the member. Usually string, number, boolean, etc.
 	Type string
-	// GoName is the full import path and name of the member.
-	GoName string
 	// Members is a list of members in this member if it's an anonymous struct.
 	Members []*StructMember
 	// Member is the struct field that we are building the typescript interface for.
@@ -132,7 +130,7 @@ func (g *Goty) enum(enum []Enum) {
 
 	data := &DataStruct{
 		Elements: make([]*Enum, len(enum)),
-		doc:      g.config.Docs,
+		doc:      g.config,
 		Type:     typ,
 		Name:     g.getStructName(typ),
 		GoName:   typ.PkgPath() + "." + typ.Name(),
@@ -178,7 +176,7 @@ func (g *Goty) parseStruct(elem reflect.Type) *DataStruct {
 		Type:    elem,
 		GoName:  elem.PkgPath() + "." + elem.Name(),
 		Members: make([]*StructMember, 0),
-		doc:     g.config.Docs,
+		doc:     g.config,
 		ovr:     g.config.override(elem),
 	}
 
@@ -211,18 +209,16 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 		}
 
 		member := &StructMember{
-			Name:   g.stripBadChars(name, elem.Type),
-			doc:    g.config.Docs, // hard to attach this later.
-			Member: elem,
-			parent: data,
-			ovr:    ovr,
+			Name:     g.stripBadChars(name, elem.Type),
+			doc:      g.config, // hard to attach this later.
+			Member:   elem,
+			parent:   data,
+			ovr:      ovr,
+			Optional: ovr.Optional,
+			Type:     ovr.Type,
 		}
 
-		// Apply any 'type' overrides.
-		if ovr.Type != "" {
-			member.Type = ovr.Type
-			member.Optional = ovr.Optional
-		} else {
+		if member.Type == "" {
 			// We only parse the member if it didn't have a type override.
 			member.Type, member.Optional = g.parseMember(data, elem.Type, member)
 		}
