@@ -73,6 +73,9 @@ type Override struct {
 	UsePkgName UsePkgName `json:"usePkgName" toml:"use_pkg_name" xml:"use-pkg-name" yaml:"usePkgName"`
 	// By default all typescript interfaces are exported. Set NoExport to true to prevent that.
 	NoExport bool `json:"noExport" toml:"no_export" xml:"no-export" yaml:"noExport"`
+	// Setting NullSlicePointers to true causes the builder to add | null to slices of pointers.
+	// If your pointer slices are nullable, set this to true.
+	NullSlicePointers bool `json:"nullSlicePointers" toml:"null_slice_pointers" xml:"null-slice-pointers" yaml:"nullSlicePointers"`
 }
 
 // Namer is an interface that allows external interface naming.
