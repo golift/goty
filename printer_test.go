@@ -112,6 +112,7 @@ func ExampleGoty_Print() {
 	//   keepUnderscores: boolean;
 	//   usePkgName: number;
 	//   noExport: boolean;
+	//   nullSlicePointers: boolean;
 	// };
 	//
 	// // Packages parsed:

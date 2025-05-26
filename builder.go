@@ -318,7 +318,7 @@ func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *Struct
 	}
 
 	name, optional := g.parseMember(parent, field.Elem(), member)
-	if optional {
+	if optional && g.config.override(field).NullSlicePointers {
 		name = "(null | " + name + ")"
 	}
 
