@@ -46,6 +46,8 @@ type Config struct {
 type Overrides map[any]Override
 
 // Override is a struct that contains overrides for either a specific type or for all types (when global).
+//
+//nolint:lll // Can't break this up I don't think.
 type Override struct {
 	// Namer is a function that can be used to customize the typescript interface name.
 	// Use this to add a prefix, suffix or any custom name changes you wish.
