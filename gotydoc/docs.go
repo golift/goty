@@ -32,13 +32,41 @@ func New() *Docs {
 	return &Docs{pkgs: make(map[string]*doc.Package)}
 }
 
-// Add a package to the handler's index.
+// AddPkg adds a package to the handler's index.
+// src is the path to the package.
+// pkg is the name of the package. Must be full package name.
+func (d *Docs) AddPkg(src string, pkg string) error {
+	fset := token.NewFileSet()
+
+	ps, err := parser.ParseDir(fset, src, nil, parser.ParseComments)
+	if err != nil {
+		return fmt.Errorf("error parsing go/doc in file %s: %w", src, err)
+	}
+
+	for _, p := range ps {
+		d.pkgs[pkg] = doc.New(p, pkg, 0)
+	}
+
+	return nil
+}
+
+// AddPkgMust adds a package to the handler's index like AddPkg but panics if there is an error.
+// See AddPkg for more details.
+func (d *Docs) AddPkgMust(src string, pkg string) *Docs {
+	if err := d.AddPkg(src, pkg); err != nil {
+		panic(err)
+	}
+
+	return d
+}
+
+// Add multiple packages to the handler's index.
 // Vendor folder should contain full-module name paths.
 // ie. They begin with github.com/username.
 // Running `go mod vendor` is a good way to create this folder.
 func (d *Docs) Add(vendorFolder string, pkg ...string) error {
 	for _, p := range pkg {
-		if err := d.add(vendorFolder, p); err != nil {
+		if err := d.AddPkg(filepath.Join(vendorFolder, p), p); err != nil {
 			return err
 		}
 	}
@@ -102,23 +130,6 @@ func findFieldName(fields []*ast.Field, name string) string {
 	}
 
 	return ""
-}
-
-func (d *Docs) add(vendorFolder string, pkg string) error {
-	fset := token.NewFileSet()
-
-	src := filepath.Join(vendorFolder, pkg)
-
-	ps, err := parser.ParseDir(fset, src, nil, parser.ParseComments)
-	if err != nil {
-		return fmt.Errorf("error parsing go/doc in file %s: %w", src, err)
-	}
-
-	for _, p := range ps {
-		d.pkgs[pkg] = doc.New(p, pkg, 0)
-	}
-
-	return nil
 }
 
 func (d *Docs) findDoc(typ reflect.Type) *doc.Type {
