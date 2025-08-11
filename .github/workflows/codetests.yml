@@ -9,7 +9,7 @@ jobs:
   codespell:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: codespell-project/actions-codespell@v2
         with:
           skip: .git
@@ -19,7 +19,7 @@ jobs:
         os: [macos, windows, ubuntu]
     runs-on: ${{ matrix.os }}-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
@@ -56,7 +56,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
