@@ -7,13 +7,24 @@ import (
 )
 
 type TestWrapper struct {
+	TestEndpoint
+
 	Profile TestLevel1
 	Level1  TestLevel1
-	TestEndpoint
-	EP   *TestEndpoint
-	Auth struct {
+	EP      *TestEndpoint
+	Auth    struct {
+		*TestEndpoint
+		TestLevel1
+
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Decoy    struct {
+			TestEndpoint
+			*TestLevel1
+
+			Apple  string
+			Banana string
+		}
 	}
 	Config *goty.Config
 }
@@ -68,19 +79,15 @@ func ExampleGoty_Print() {
 	//   Profile: TestLevel1;
 	//   Level1: TestLevel1;
 	//   EP?: TestEndpoint;
-	//   Auth: {
+	//   Auth: TestEndpoint & TestLevel1 & {
 	//     username: string;
 	//     password: string;
+	//     Decoy: TestEndpoint & TestLevel1 & {
+	//       Apple: string;
+	//       Banana: string;
+	//     };
 	//   };
 	//   Config?: Config;
-	// };
-	//
-	// /**
-	//  * @see golang: <golift.io/goty_test.TestLevel1>
-	//  */
-	// export interface TestLevel1 {
-	//   name: string;
-	//   date: Date;
 	// };
 	//
 	// /**
@@ -89,6 +96,14 @@ func ExampleGoty_Print() {
 	// export interface TestEndpoint {
 	//   url: string;
 	//   apiKey: string;
+	// };
+	//
+	// /**
+	//  * @see golang: <golift.io/goty_test.TestLevel1>
+	//  */
+	// export interface TestLevel1 {
+	//   name: string;
+	//   date: Date;
 	// };
 	//
 	// /**

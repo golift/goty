@@ -27,7 +27,8 @@ func (g *Goty) Write(fileName string, overwrite bool) error {
 		return ErrNoStructs
 	}
 
-	if _, err := os.Stat(fileName); !os.IsNotExist(err) && !overwrite {
+	_, err := os.Stat(fileName)
+	if !os.IsNotExist(err) && !overwrite {
 		return fmt.Errorf("file exists: %s: %w", fileName, os.ErrExist)
 	}
 
@@ -85,8 +86,13 @@ func (m *StructMember) Print(indent string, output io.Writer) {
 
 	doc := formatDocs(true, indent, m.doc.Member(m.parent.Type, m.Member.Name), m.ovr.Comment)
 
+	extends := ""
+	if len(m.Extends) > 0 {
+		extends = strings.Join(m.Extends, ` & `) + ` & `
+	}
+
 	if m.Members == nil {
-		fmt.Fprintln(output, doc+indent+m.Name+optional+`: `+m.Type+`;`)
+		fmt.Fprintln(output, doc+indent+m.Name+optional+`: `+extends+m.Type+`;`)
 		return
 	}
 
@@ -94,7 +100,7 @@ func (m *StructMember) Print(indent string, output io.Writer) {
 		optional = "null | "
 	}
 
-	fmt.Fprintln(output, indent+m.Name+`: `+optional+`{`)
+	fmt.Fprintln(output, indent+m.Name+`: `+optional+extends+`{`)
 
 	for _, m := range m.Members {
 		m.Print(indent+`  `, output)
