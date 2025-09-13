@@ -27,7 +27,8 @@ func (g *Goty) Write(fileName string, overwrite bool) error {
 		return ErrNoStructs
 	}
 
-	if _, err := os.Stat(fileName); !os.IsNotExist(err) && !overwrite {
+	_, err := os.Stat(fileName)
+	if !os.IsNotExist(err) && !overwrite {
 		return fmt.Errorf("file exists: %s: %w", fileName, os.ErrExist)
 	}
 

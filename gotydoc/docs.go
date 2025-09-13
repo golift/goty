@@ -53,7 +53,8 @@ func (d *Docs) AddPkg(src string, pkg string) error {
 // AddPkgMust adds a package to the handler's index like AddPkg but panics if there is an error.
 // See AddPkg for more details.
 func (d *Docs) AddPkgMust(src string, pkg string) *Docs {
-	if err := d.AddPkg(src, pkg); err != nil {
+	err := d.AddPkg(src, pkg)
+	if err != nil {
 		panic(err)
 	}
 
@@ -66,7 +67,8 @@ func (d *Docs) AddPkgMust(src string, pkg string) *Docs {
 // Running `go mod vendor` is a good way to create this folder.
 func (d *Docs) Add(vendorFolder string, pkg ...string) error {
 	for _, p := range pkg {
-		if err := d.AddPkg(filepath.Join(vendorFolder, p), p); err != nil {
+		err := d.AddPkg(filepath.Join(vendorFolder, p), p)
+		if err != nil {
 			return err
 		}
 	}

@@ -307,6 +307,7 @@ func (g *Goty) checkStruct(field reflect.Type, member *StructMember) string {
 	if structMember.Name == "" { // Embedded struct.
 		member.Members = append(member.Members, structMember.Members...)
 		member.Extends = append(member.Extends, structMember.Extends...)
+
 		return "" // embedded structs don't have names; deal with it.
 	}
 
