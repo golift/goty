@@ -68,6 +68,8 @@ type StructMember struct {
 	Type string
 	// Members is a list of members in this member if it's an anonymous struct.
 	Members []*StructMember
+	// Extends is a list of struct names that this member extends if it's a struct with anonymous members.
+	Extends []string
 	// Member is the struct field that we are building the typescript interface for.
 	Member reflect.StructField
 	// Optional is true if the member is optional.
@@ -304,6 +306,7 @@ func (g *Goty) checkStruct(field reflect.Type, member *StructMember) string {
 	structMember := g.parseStruct(field)
 	if structMember.Name == "" { // Embedded struct.
 		member.Members = append(member.Members, structMember.Members...)
+		member.Extends = append(member.Extends, structMember.Extends...)
 		return "" // embedded structs don't have names; deal with it.
 	}
 

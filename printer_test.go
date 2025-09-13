@@ -14,6 +14,14 @@ type TestWrapper struct {
 	Auth struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		*TestEndpoint
+		TestLevel1
+		Decoy struct {
+			TestEndpoint
+			*TestLevel1
+			Apple  string
+			Banana string
+		}
 	}
 	Config *goty.Config
 }
@@ -68,9 +76,13 @@ func ExampleGoty_Print() {
 	//   Profile: TestLevel1;
 	//   Level1: TestLevel1;
 	//   EP?: TestEndpoint;
-	//   Auth: {
+	//   Auth: TestEndpoint & TestLevel1 & {
 	//     username: string;
 	//     password: string;
+	//     Decoy: TestEndpoint & TestLevel1 & {
+	//       Apple: string;
+	//       Banana: string;
+	//     };
 	//   };
 	//   Config?: Config;
 	// };
