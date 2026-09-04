@@ -425,7 +425,7 @@ func specialType(field reflect.Type) (string, bool, bool) {
 		return tsDate, optional, true
 	case field == reflect.TypeFor[json.RawMessage]():
 		return tsAny, true, true
-	case embedsAnonymousTime(field):
+	case embedsAnonymousTime(field) && isRFC3339JSON(field):
 		return tsDate, optional, true
 	default:
 		return specialMarshalerType(field, optional)
@@ -463,6 +463,70 @@ func embedsAnonymousTime(field reflect.Type) bool {
 	}
 
 	return false
+}
+
+func isRFC3339JSON(field reflect.Type) bool {
+	if !implementsIface(field, reflect.TypeFor[json.Marshaler]()) {
+		return false
+	}
+
+	raw, err := marshalJSONTimeEmbed(field)
+	if err != nil {
+		return false
+	}
+
+	s := strings.Trim(string(bytes.TrimSpace(raw)), `"`)
+	_, err = time.Parse(time.RFC3339, s)
+
+	return err == nil
+}
+
+func marshalJSONTimeEmbed(typ reflect.Type) ([]byte, error) {
+	var (
+		raw []byte
+		err error
+	)
+
+	func() {
+		defer func() {
+			if recover() != nil {
+				err = errJSONMarshalPanic
+			}
+		}()
+
+		val := reflect.New(typ)
+		fillAnonTimePointers(val.Elem())
+
+		raw, err = json.Marshal(val.Interface())
+		if err != nil {
+			err = fmt.Errorf("marshal time embed: %w", err)
+		}
+	}()
+
+	return raw, err
+}
+
+func fillAnonTimePointers(val reflect.Value) {
+	if val.Kind() != reflect.Struct {
+		return
+	}
+
+	typ := val.Type()
+	for idx := range typ.NumField() {
+		field := typ.Field(idx)
+		if !field.Anonymous {
+			continue
+		}
+
+		fieldVal := val.Field(idx)
+		if !fieldVal.CanSet() || fieldVal.Kind() != reflect.Ptr || !fieldVal.IsNil() {
+			continue
+		}
+
+		if fieldVal.Type().Elem() == reflect.TypeFor[time.Time]() {
+			fieldVal.Set(reflect.New(fieldVal.Type().Elem()))
+		}
+	}
 }
 
 func specialMarshalerType(field reflect.Type, optional bool) (string, bool, bool) {

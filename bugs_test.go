@@ -377,6 +377,60 @@ func TestEmbeddedTimeFieldIsDate(t *testing.T) {
 	}
 }
 
+type ownMarshal struct {
+	time.Time
+
+	Name string `json:"name"`
+}
+
+func (o ownMarshal) MarshalJSON() ([]byte, error) {
+	raw, err := json.Marshal(struct {
+		TS   time.Time `json:"ts"`
+		Name string    `json:"name"`
+	}{TS: o.Time, Name: o.Name})
+	if err != nil {
+		return nil, fmt.Errorf("marshal ownMarshal: %w", err)
+	}
+
+	return raw, nil
+}
+
+type ownMarshalHolder struct {
+	E ownMarshal `json:"e"`
+}
+
+func TestOwnMarshalJSONOnTimeEmbedIsNotDate(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, ownMarshalHolder{})
+	if strings.Contains(out, "e: Date") {
+		t.Fatalf("own MarshalJSON was typed as Date:\n%s", out)
+	}
+
+	if !strings.Contains(out, "e: any;") {
+		t.Fatalf("own object marshaler should stay any:\n%s", out)
+	}
+}
+
+type ptrTimeEmbed struct {
+	*time.Time
+
+	X string `json:"x"`
+}
+
+type ptrTimeEmbedHolder struct {
+	E ptrTimeEmbed `json:"e"`
+}
+
+func TestPointerTimeEmbedFieldIsDate(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, ptrTimeEmbedHolder{})
+	if !strings.Contains(out, "e: Date;") {
+		t.Fatalf("*time.Time embed field should be Date:\n%s", out)
+	}
+}
+
 func TestRootTextMarshalerIsAlias(t *testing.T) {
 	t.Parallel()
 
