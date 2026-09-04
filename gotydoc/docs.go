@@ -5,6 +5,7 @@ package gotydoc
 import (
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/doc"
 	"go/parser"
 	"go/token"
@@ -40,8 +41,9 @@ func New() *Docs {
 func (d *Docs) AddPkg(src string, pkg string) error {
 	fset := token.NewFileSet()
 
-	// Skip _test.go so external tests (package foo_test) cannot overwrite foo.
-	ps, err := parser.ParseDir(fset, src, skipTestFiles, parser.ParseComments)
+	// Skip _test.go and files that fail GOOS/GOARCH/build tags so a Windows
+	// file cannot overwrite docs from the file that actually compiles here.
+	ps, err := parser.ParseDir(fset, src, packageFiles(src), parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("error parsing go/doc in file %s: %w", src, err)
 	}
@@ -55,8 +57,16 @@ func (d *Docs) AddPkg(src string, pkg string) error {
 	return nil
 }
 
-func skipTestFiles(info fs.FileInfo) bool {
-	return !strings.HasSuffix(info.Name(), "_test.go")
+func packageFiles(dir string) func(fs.FileInfo) bool {
+	return func(info fs.FileInfo) bool {
+		if strings.HasSuffix(info.Name(), "_test.go") {
+			return false
+		}
+
+		ok, err := build.Default.MatchFile(dir, info.Name())
+
+		return err == nil && ok
+	}
 }
 
 // pickPackage chooses the production package for an import path.

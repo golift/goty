@@ -65,6 +65,7 @@ type Override struct {
 	Comment string `json:"comment" toml:"comment" xml:"comment" yaml:"comment"`
 	// Setting optional to true will add a question mark to the typescript name.
 	// This has no effect when set inside a global override; it's type specific.
+	// JSON null is modeled as `null | T` on the type, not as `?`.
 	Optional bool `json:"optional" toml:"optional" xml:"optional" yaml:"optional"`
 	// Setting KeepBadChars to true will keep bad characters in the typescript name.
 	// These include pretty much all those characters on the number keys on your keyboard.

@@ -78,7 +78,7 @@ func ExampleGoty_Print() {
 	// export interface TestWrapper extends TestEndpoint {
 	//   Profile: TestLevel1;
 	//   Level1: TestLevel1;
-	//   EP?: TestEndpoint;
+	//   EP: null | TestEndpoint;
 	//   Auth: TestEndpoint & TestLevel1 & {
 	//     username: string;
 	//     password: string;
@@ -87,7 +87,7 @@ func ExampleGoty_Print() {
 	//       Banana: string;
 	//     };
 	//   };
-	//   Config?: Config;
+	//   Config: null | Config;
 	// };
 	//
 	// /**
@@ -110,7 +110,7 @@ func ExampleGoty_Print() {
 	//  * @see golang: <golift.io/goty.Config>
 	//  */
 	// export interface Config {
-	//   overrides?: Record<null | any, Override>;
+	//   overrides: null | Record<null | any, Override>;
 	//   globalOverrides: Override;
 	// };
 	//
