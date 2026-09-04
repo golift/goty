@@ -1,16 +1,27 @@
 package goty
 
 import (
+	"bytes"
+	"encoding"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"golift.io/goty/gotyface"
 )
 
-const tsString = "string"
+const (
+	tsString  = "string"
+	tsDate    = "Date"
+	tsAny     = "any"
+	tsNumber  = "number"
+	tsBoolean = "boolean"
+)
 
 // Goty is the main struct for the builder.
 // It's used to build typescript interfaces from go structs.
@@ -205,10 +216,10 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 	for idx := range field.NumField() { // Loop each struct member
 		elem := field.Field(idx)
 		ovr := g.config.override(elem.Type)
-		name, opts := splitTag(elem.Tag.Get(ovr.Tag))
+		name, opts, hasComma := splitTag(elem.Tag.Get(ovr.Tag))
 
 		switch {
-		case name == "-":
+		case name == "-" && !hasComma:
 			continue
 		case !elem.IsExported() && !isAnonymousStructField(elem):
 			// encoding/json promotes exported fields from unexported anonymous
@@ -218,8 +229,14 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 			name = elem.Name
 		}
 
+		tsName := g.stripBadChars(name, elem.Type)
+		if name == "-" {
+			// json:"-," is the escape for a field literally named "-".
+			tsName = `"-"`
+		}
+
 		member := &StructMember{
-			Name:     g.stripBadChars(name, elem.Type),
+			Name:     tsName,
 			doc:      g.config, // hard to attach this later.
 			Member:   elem,
 			parent:   data,
@@ -238,13 +255,17 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 	}
 }
 
-func splitTag(tag string) (string, []string) {
-	name, rest, _ := strings.Cut(tag, ",")
-	if rest == "" {
-		return name, nil
+func splitTag(tag string) (string, []string, bool) {
+	name, rest, hasComma := strings.Cut(tag, ",")
+	if !hasComma {
+		return name, nil, false
 	}
 
-	return name, strings.Split(rest, ",")
+	if rest == "" {
+		return name, nil, true
+	}
+
+	return name, strings.Split(rest, ","), true
 }
 
 func applyJSONOptions(member *StructMember, options []string, typeOverride string) {
@@ -294,8 +315,21 @@ func isAnonymousEmbed(member *StructMember) bool {
 	}
 
 	jsonName, _, _ := strings.Cut(member.Member.Tag.Get(member.ovr.Tag), ",")
+	if jsonName != "" {
+		return false
+	}
 
-	return jsonName == ""
+	// time.Time and other marshaler structs become scalar TS types; do not extends Date.
+	return !isTSScalar(member.Type)
+}
+
+func isTSScalar(name string) bool {
+	switch name {
+	case tsString, tsNumber, tsBoolean, tsDate, tsAny:
+		return true
+	default:
+		return false
+	}
 }
 
 func isAnonymousStructField(elem reflect.StructField) bool {
@@ -320,6 +354,10 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 		return g.structTypes[field].Name, false
 	}
 
+	if name, optional, ok := specialType(field); ok {
+		return name, optional
+	}
+
 	switch field.Kind() {
 	case reflect.Ptr:
 		s, _ := g.parseMember(parent, field.Elem(), member)
@@ -331,11 +369,11 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 	case reflect.Map:
 		return g.parseMap(parent, field, member), true
 	case reflect.Bool:
-		return "boolean", false
+		return tsBoolean, false
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64, reflect.Uintptr:
-		return "number", false
+		return tsNumber, false
 	case reflect.String:
 		return tsString, false
 	case reflect.Interface:
@@ -351,8 +389,109 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 	case reflect.Invalid:
 		fallthrough
 	default:
-		return "any", true
+		return tsAny, true
 	}
+}
+
+var (
+	errNotJSONMarshaler = errors.New("not a json.Marshaler")
+	errJSONMarshalPanic = errors.New("json marshaler panicked")
+)
+
+// specialType maps types whose JSON form is not their Go kind.
+// time.Time stays Date. json.Marshaler is probed on the zero value.
+// encoding.TextMarshaler (without MarshalJSON) is a JSON string.
+func specialType(field reflect.Type) (string, bool, bool) {
+	optional := field.Kind() == reflect.Ptr || field.Kind() == reflect.Slice || field.Kind() == reflect.Map
+
+	for field.Kind() == reflect.Ptr {
+		field = field.Elem()
+		optional = true
+	}
+
+	switch {
+	case field == reflect.TypeFor[time.Time]():
+		return tsDate, optional, true
+	case field == reflect.TypeFor[json.RawMessage]():
+		return tsAny, true, true
+	case implementsIface(field, reflect.TypeFor[json.Marshaler]()):
+		return inferJSONMarshalerType(field), optional, true
+	case implementsIface(field, reflect.TypeFor[encoding.TextMarshaler]()):
+		return tsString, optional, true
+	default:
+		return "", false, false
+	}
+}
+
+func implementsIface(typ, iface reflect.Type) bool {
+	if typ.Implements(iface) {
+		return true
+	}
+
+	return typ.Kind() != reflect.Ptr && reflect.PointerTo(typ).Implements(iface)
+}
+
+func inferJSONMarshalerType(typ reflect.Type) string {
+	raw, err := marshalJSONZero(typ)
+	if err != nil || len(bytes.TrimSpace(raw)) == 0 {
+		return tsAny
+	}
+
+	switch bytes.TrimSpace(raw)[0] {
+	case '"':
+		return tsString
+	case 't', 'f':
+		return tsBoolean
+	case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return tsNumber
+	default:
+		return tsAny
+	}
+}
+
+func marshalJSONZero(typ reflect.Type) ([]byte, error) {
+	var (
+		raw []byte
+		err error
+	)
+
+	func() {
+		defer func() {
+			if recover() != nil {
+				err = errJSONMarshalPanic
+			}
+		}()
+
+		raw, err = callJSONMarshaler(typ)
+	}()
+
+	return raw, err
+}
+
+func callJSONMarshaler(typ reflect.Type) ([]byte, error) {
+	iface := reflect.TypeFor[json.Marshaler]()
+
+	var val reflect.Value
+	switch {
+	case typ.Kind() == reflect.Ptr:
+		val = reflect.New(typ.Elem())
+	case reflect.PointerTo(typ).Implements(iface):
+		val = reflect.New(typ)
+	default:
+		val = reflect.New(typ).Elem()
+	}
+
+	marshaler, ok := val.Interface().(json.Marshaler)
+	if !ok {
+		return nil, errNotJSONMarshaler
+	}
+
+	raw, err := marshaler.MarshalJSON()
+	if err != nil {
+		return nil, fmt.Errorf("marshal json: %w", err)
+	}
+
+	return raw, nil
 }
 
 // checkStruct provides some logic to detect special struct types.
@@ -360,9 +499,9 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 func (g *Goty) checkStruct(field reflect.Type, member *StructMember) string {
 	switch field.String() {
 	case "time.Time":
-		return "Date"
+		return tsDate
 	case "time.Duration":
-		return "number"
+		return tsNumber
 	}
 
 	structMember := g.parseStruct(field)
@@ -382,7 +521,7 @@ func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *Struct
 	// json.RawMessage is a named []byte inserted as raw JSON. Since Go 1.26 it is
 	// an alias of encoding/json/jsontext.Value, so compare types, not PkgPath/Name.
 	if field == reflect.TypeFor[json.RawMessage]() {
-		return "any"
+		return tsAny
 	}
 
 	if field.Kind() == reflect.Slice && field.Elem().Kind() == reflect.Uint8 {

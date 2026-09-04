@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golift.io/goty"
 )
@@ -118,6 +119,94 @@ func TestJSONNameStringIsNotStringOption(t *testing.T) {
 	out := printType(t, jsonNameString{})
 	if !strings.Contains(out, "string: number;") {
 		t.Fatalf("json name \"string\" should not force the string option:\n%s", out)
+	}
+}
+
+type jsonNameOmitempty struct {
+	Val string `json:"omitempty"`
+}
+
+func TestJSONNameOmitemptyIsNotOption(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, jsonNameOmitempty{})
+	if !strings.Contains(out, "omitempty: string;") {
+		t.Fatalf("json name \"omitempty\" should not force optional:\n%s", out)
+	}
+}
+
+type dashNamedField struct {
+	Minus string `json:"-,"` //nolint:staticcheck // encoding/json escape for a field named "-"
+	Skip  string `json:"-"`
+	Keep  string `json:"keep"`
+}
+
+func TestJSONDashCommaIsLiteralName(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, dashNamedField{})
+	if !strings.Contains(out, `"-": string;`) {
+		t.Fatalf("json \"-,\" should emit a field named -:\n%s", out)
+	}
+
+	if strings.Contains(out, "Skip") || strings.Contains(out, "skip:") {
+		t.Fatalf("json \"-\" field should be omitted:\n%s", out)
+	}
+
+	if !strings.Contains(out, "keep: string;") {
+		t.Fatalf("keep field missing:\n%s", out)
+	}
+}
+
+type pathLike struct {
+	Dir  string
+	File string
+}
+
+func (p pathLike) MarshalText() ([]byte, error) {
+	return []byte(p.Dir + "/" + p.File), nil
+}
+
+type hexHash [4]byte
+
+func (h hexHash) MarshalJSON() ([]byte, error) {
+	return []byte(`"deadbeef"`), nil
+}
+
+type rawBlob []byte
+
+func (b rawBlob) MarshalJSON() ([]byte, error) {
+	return []byte(`{"n":1}`), nil
+}
+
+type marshalerHolder struct {
+	When time.Time `json:"when"`
+	Path pathLike  `json:"path"`
+	ID   hexHash   `json:"id"`
+	Blob rawBlob   `json:"blob"`
+}
+
+func TestMarshalersUseJSONWireType(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, marshalerHolder{})
+	for _, want := range []string{
+		"when: Date;",
+		"path: string;",
+		"id: string;",
+		"blob?: any;",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+
+	if strings.Contains(out, "interface PathLike") {
+		t.Fatalf("TextMarshaler struct was expanded as an interface:\n%s", out)
+	}
+
+	if strings.Contains(out, "number[]") {
+		t.Fatalf("json.Marshaler byte array was emitted as number[]:\n%s", out)
 	}
 }
 

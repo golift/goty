@@ -59,6 +59,21 @@ func TestAnonymousFieldDocs(t *testing.T) {
 	}
 }
 
+func TestUnexportedTypeDocs(t *testing.T) {
+	t.Parallel()
+
+	docs := sampleDocs(t)
+	got := docs.Type(sample.SecretHolderType())
+	if got != "secretHolder is unexported so go/doc mode 0 would drop it." {
+		t.Fatalf("unexported type doc = %q", got)
+	}
+
+	got = docs.Member(sample.SecretHolderType(), "Token")
+	if got != "Token is a secret field." {
+		t.Fatalf("unexported member doc = %q", got)
+	}
+}
+
 func TestGroupedTypeMemberDocs(t *testing.T) {
 	t.Parallel()
 

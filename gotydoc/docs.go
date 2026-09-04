@@ -47,7 +47,9 @@ func (d *Docs) AddPkg(src string, pkg string) error {
 	}
 
 	if p := pickPackage(ps, pkg); p != nil {
-		d.pkgs[pkg] = doc.New(p, pkg, 0)
+		// AllDecls so unexported embedded structs (which encoding/json promotes)
+		// still have type and field comments available.
+		d.pkgs[pkg] = doc.New(p, pkg, doc.AllDecls)
 	}
 
 	return nil
@@ -153,8 +155,8 @@ func (d *Docs) Member(parent reflect.Type, name string) string {
 	}
 }
 
-// namedTypeSpec finds this type's spec in a possibly grouped `type ( ... )` decl.
-// Specs[0] is some other type when several share one GenDecl.
+// namedTypeSpec returns the TypeSpec whose name matches doct.
+// go/doc usually synthesizes a one-spec GenDecl, but we still search by name.
 func namedTypeSpec(doct *doc.Type) *ast.TypeSpec {
 	if doct.Decl == nil {
 		return nil
