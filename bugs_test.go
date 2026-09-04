@@ -177,13 +177,8 @@ func TestWriteStatErrorIsNotFileExists(t *testing.T) {
 	goat := goty.NewGoty(nil)
 	goat.Parse(omitZeroField{})
 
-	notDir := filepath.Join(t.TempDir(), "not-a-dir")
-	err := os.WriteFile(notDir, []byte("x"), 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = goat.Write(filepath.Join(notDir, "out.ts"), false)
+	path := statErrorPath(t)
+	err := goat.Write(path, false)
 	if err == nil {
 		t.Fatal("expected stat error")
 	}
@@ -195,6 +190,35 @@ func TestWriteStatErrorIsNotFileExists(t *testing.T) {
 	if !strings.Contains(err.Error(), "stat file") {
 		t.Fatalf("expected stat file error, got: %v", err)
 	}
+}
+
+// statErrorPath returns a path whose Stat error is not fs.ErrNotExist.
+// On Unix, a child of a regular file is ENOTDIR. Windows maps that to
+// ERROR_PATH_NOT_FOUND (IsNotExist), so we use an illegal filename instead.
+func statErrorPath(t *testing.T) string {
+	t.Helper()
+
+	notDir := filepath.Join(t.TempDir(), "not-a-dir")
+	err := os.WriteFile(notDir, []byte("x"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{
+		filepath.Join(notDir, "out.ts"),
+		filepath.Join(t.TempDir(), "foo*bar.ts"),
+		filepath.Join(t.TempDir(), "foo|bar.ts"),
+		filepath.Join(t.TempDir(), "foo?bar.ts"),
+	} {
+		_, err := os.Stat(path)
+		if err != nil && !os.IsNotExist(err) {
+			return path
+		}
+	}
+
+	t.Fatal("no path produced a Stat error other than NotExist")
+
+	return ""
 }
 
 func TestEmptyEnumDoesNotPanic(t *testing.T) {
