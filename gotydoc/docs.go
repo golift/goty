@@ -8,8 +8,10 @@ import (
 	"go/doc"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	"golift.io/goty/gotyface"
@@ -38,16 +40,48 @@ func New() *Docs {
 func (d *Docs) AddPkg(src string, pkg string) error {
 	fset := token.NewFileSet()
 
-	ps, err := parser.ParseDir(fset, src, nil, parser.ParseComments)
+	// Skip _test.go so external tests (package foo_test) cannot overwrite foo.
+	ps, err := parser.ParseDir(fset, src, skipTestFiles, parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("error parsing go/doc in file %s: %w", src, err)
 	}
 
-	for _, p := range ps {
+	if p := pickPackage(ps, pkg); p != nil {
 		d.pkgs[pkg] = doc.New(p, pkg, 0)
 	}
 
 	return nil
+}
+
+func skipTestFiles(info fs.FileInfo) bool {
+	return !strings.HasSuffix(info.Name(), "_test.go")
+}
+
+// pickPackage chooses the production package for an import path.
+// parser.ParseDir groups files by the `package` clause, so a directory can
+// contain both `foo` and `foo_test`. Ranging that map is non-deterministic;
+// the last package used to win and silently drop all type docs.
+//
+//nolint:staticcheck // parser.ParseDir still returns *ast.Package.
+func pickPackage(pkgs map[string]*ast.Package, importPath string) *ast.Package {
+	if pkg, ok := pkgs[filepath.Base(importPath)]; ok {
+		return pkg
+	}
+
+	names := make([]string, 0, len(pkgs))
+	for name := range pkgs {
+		if !strings.HasSuffix(name, "_test") {
+			names = append(names, name)
+		}
+	}
+
+	slices.Sort(names)
+
+	if len(names) == 0 {
+		return nil
+	}
+
+	return pkgs[names[0]]
 }
 
 // AddPkgMust adds a package to the handler's index like AddPkg but panics if there is an error.
@@ -140,13 +174,22 @@ func (d *Docs) findDoc(typ reflect.Type) *doc.Type {
 		return nil
 	}
 
+	want := instantiatedName(typ.Name())
 	for _, doct := range pkg.Types {
-		if doct.Name == typ.Name() {
+		if doct.Name == want {
 			return doct
 		}
 	}
 
 	return nil
+}
+
+// instantiatedName strips type parameters from a reflect type name.
+// APIResponse[any] is named "APIResponse[interface {}]" at runtime.
+func instantiatedName(name string) string {
+	base, _, _ := strings.Cut(name, "[")
+
+	return base
 }
 
 // Validate the interface implementation.

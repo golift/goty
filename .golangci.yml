@@ -4,8 +4,15 @@ linters:
   disable:
     - nlreturn
     - exhaustruct
+    - exhaustruct_v5
     - wsl
+    - wsl_v5
+    - gomodguard
+    - gomodguard_v2
   settings:
+    govet:
+      disable:
+        - inline
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false

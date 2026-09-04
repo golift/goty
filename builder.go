@@ -135,7 +135,7 @@ func (g *Goty) enum(enum []Enum) {
 		doc:      g.config,
 		Type:     typ,
 		Name:     g.getStructName(typ),
-		GoName:   typ.PkgPath() + "." + typ.Name(),
+		GoName:   typ.PkgPath() + "." + instantiatedName(typ.Name()),
 		ovr:      g.config.override(typ),
 	}
 
@@ -176,7 +176,7 @@ func (g *Goty) parseStruct(elem reflect.Type) *DataStruct {
 	data := &DataStruct{
 		Name:    name,
 		Type:    elem,
-		GoName:  elem.PkgPath() + "." + elem.Name(),
+		GoName:  elem.PkgPath() + "." + instantiatedName(elem.Name()),
 		Members: make([]*StructMember, 0),
 		doc:     g.config,
 		ovr:     g.config.override(elem),
@@ -361,14 +361,15 @@ func (g *Goty) parseMap(parent *DataStruct, field reflect.Type, member *StructMe
 // - Make the name lowercase, uppercase, camelcase or snake_case.
 func (g *Goty) getStructName(elem reflect.Type) string {
 	ovr := g.config.override(elem)
-	name := ovr.Namer(elem, capitalizeFirstLetter(elem.Name()))
+	elemName := instantiatedName(elem.Name())
+	name := ovr.Namer(elem, capitalizeFirstLetter(elemName))
 	name = g.stripBadChars(name, elem)
 	pkgParts := strings.Split(elem.PkgPath(), "/")
 
 	if ovr.UsePkgName == UsePkgNameAlways ||
 		(g.structNames[name] && ovr.UsePkgName == UsePkgNameOnConflict) {
 		// We have to pass the original element name back in here so any name changes are repeated.
-		name = ovr.Namer(elem, capitalizeFirstLetter(pkgParts[len(pkgParts)-1])+elem.Name())
+		name = ovr.Namer(elem, capitalizeFirstLetter(pkgParts[len(pkgParts)-1])+elemName)
 	}
 
 	// Name is elem name, or base pkg name + elem name. If there is an override, use it.
@@ -431,4 +432,13 @@ func (g *Goty) stripBadChars(name string, typ reflect.Type) string {
 	}
 
 	return output.String()
+}
+
+// instantiatedName strips type parameters from a reflect type name.
+// APIResponse[any] is named "APIResponse[interface {}]" at runtime; those
+// brackets would otherwise be stripped into "APIResponseinterface".
+func instantiatedName(name string) string {
+	base, _, _ := strings.Cut(name, "[")
+
+	return base
 }
