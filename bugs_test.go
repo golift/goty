@@ -277,6 +277,48 @@ func TestNilMarshalerProbeKeepsElementType(t *testing.T) {
 	}
 }
 
+type sDual []string
+
+func (t *sDual) MarshalJSON() ([]byte, error) {
+	if t == nil || *t == nil {
+		return []byte("null"), nil
+	}
+
+	raw, err := json.Marshal([]string(*t))
+	if err != nil {
+		return nil, fmt.Errorf("marshal sDual: %w", err)
+	}
+
+	return raw, nil
+}
+
+func (*sDual) MarshalText() ([]byte, error) {
+	return []byte("text"), nil
+}
+
+type dualHolder struct {
+	D  sDual   `json:"d"`
+	LD []sDual `json:"ld"`
+}
+
+func TestNullJSONMarshalerDoesNotFallThroughToText(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, dualHolder{})
+	for _, want := range []string{
+		"d?: string[];",
+		"ld?: string[][];",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+
+	if strings.Contains(out, "d?: string;") || strings.Contains(out, "ld?: string[];") {
+		t.Fatalf("null JSON probe fell through to TextMarshaler:\n%s", out)
+	}
+}
+
 type date struct {
 	Y int `json:"y"`
 	M int `json:"m"`

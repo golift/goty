@@ -424,6 +424,10 @@ func specialMarshalerType(field reflect.Type, optional bool) (string, bool, bool
 		if name, ok := inferJSONMarshalerType(field); ok {
 			return name, optional, true
 		}
+
+		// encoding/json prefers MarshalJSON whenever the value is addressable.
+		// An inconclusive probe must not fall through to TextMarshaler.
+		return "", false, false
 	}
 
 	if implementsIface(field, reflect.TypeFor[encoding.TextMarshaler]()) {
