@@ -373,9 +373,11 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 	case reflect.Struct:
 		return g.checkStruct(field, member), false
 	case reflect.Array, reflect.Slice:
-		return g.parseSlice(parent, field, member), true
+		// encoding/json always emits the key (nil slice → null). Omitempty/omitzero
+		// are applied later. Arrays are never nil.
+		return g.parseSlice(parent, field, member), false
 	case reflect.Map:
-		return g.parseMap(parent, field, member), true
+		return g.parseMap(parent, field, member), false
 	case reflect.Bool:
 		return tsBoolean, false
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -403,10 +405,12 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 
 // specialType maps types whose JSON form is not their Go kind.
 // Only contracts encoding/json itself guarantees get a narrow type:
-// time.Time is Date, TextMarshaler without MarshalJSON is string.
-// Arbitrary json.Marshaler output can vary by value, so that is any.
+// time.Time is Date, time.Duration is a nanosecond number, TextMarshaler
+// without MarshalJSON is string. Arbitrary json.Marshaler output can vary
+// by value, so that is any. Optional follows pointers only; omitempty
+// and omitzero are applied by the caller.
 func specialType(field reflect.Type) (string, bool, bool) {
-	optional := field.Kind() == reflect.Ptr || field.Kind() == reflect.Slice || field.Kind() == reflect.Map
+	optional := field.Kind() == reflect.Ptr
 
 	for field.Kind() == reflect.Ptr {
 		field = field.Elem()
@@ -416,8 +420,12 @@ func specialType(field reflect.Type) (string, bool, bool) {
 	switch {
 	case field == reflect.TypeFor[time.Time]():
 		return tsDate, optional, true
+	case field == reflect.TypeFor[time.Duration]():
+		// Duration is int64, so checkStruct never sees it. encoding/json v1
+		// writes nanoseconds as a number even if Duration grows TextMarshaler.
+		return tsNumber, optional, true
 	case field == reflect.TypeFor[json.RawMessage]():
-		return tsAny, true, true
+		return tsAny, optional, true
 	case implementsIface(field, reflect.TypeFor[json.Marshaler]()):
 		return tsAny, optional, true
 	case implementsIface(field, reflect.TypeFor[encoding.TextMarshaler]()):
@@ -435,16 +443,9 @@ func implementsIface(typ, iface reflect.Type) bool {
 	return typ.Kind() != reflect.Ptr && reflect.PointerTo(typ).Implements(iface)
 }
 
-// checkStruct provides some logic to detect special struct types.
-// Those include time.Time/Duration and embedded structs. Do we need others?
+// checkStruct walks a named or anonymous struct after specialType has already
+// claimed time.Time and other marshaler contracts.
 func (g *Goty) checkStruct(field reflect.Type, member *StructMember) string {
-	switch field.String() {
-	case "time.Time":
-		return tsDate
-	case "time.Duration":
-		return tsNumber
-	}
-
 	structMember := g.parseStruct(field)
 	if structMember.Name == "" { // Embedded struct.
 		member.Members = append(member.Members, structMember.Members...)

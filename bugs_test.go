@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,9 +78,9 @@ func TestByteSlicesAreStrings(t *testing.T) {
 
 	out := printType(t, byteSliceHolder{})
 	for _, want := range []string{
-		"raw?: any;",
-		"data?: string;",
-		"blob?: string;",
+		"raw: any;",
+		"data: string;",
+		"blob: string;",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -195,7 +196,7 @@ func TestMarshalersUseJSONWireType(t *testing.T) {
 		"when: Date;",
 		"path: string;",
 		"id: any;",
-		"blob?: any;",
+		"blob: any;",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -264,8 +265,8 @@ func TestJSONMarshalerSliceIsAny(t *testing.T) {
 
 	out := printType(t, tagHolder{})
 	for _, want := range []string{
-		"tags?: any;",
-		"list?: any[];",
+		"tags: any;",
+		"list: any[];",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -302,15 +303,15 @@ func TestJSONMarshalerDoesNotFallThroughToText(t *testing.T) {
 
 	out := printType(t, dualHolder{})
 	for _, want := range []string{
-		"d?: any;",
-		"ld?: any[];",
+		"d: any;",
+		"ld: any[];",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
 	}
 
-	if strings.Contains(out, "d?: string;") || strings.Contains(out, "ld?: string[];") {
+	if strings.Contains(out, "d: string;") || strings.Contains(out, "ld: string[];") {
 		t.Fatalf("json.Marshaler fell through to TextMarshaler:\n%s", out)
 	}
 }
@@ -480,7 +481,7 @@ func TestJSONStringOptionIgnoresUnsupportedKinds(t *testing.T) {
 	}
 
 	out := printType(t, tagged{})
-	if !strings.Contains(out, "items?: number[];") {
+	if !strings.Contains(out, "items: number[];") {
 		t.Fatalf("slice with string option should stay a slice:\n%s", out)
 	}
 }
@@ -519,6 +520,73 @@ func TestUnexportedAnonymousScalarIsSkipped(t *testing.T) {
 
 	if !strings.Contains(out, "top: string;") {
 		t.Fatalf("exported field missing:\n%s", out)
+	}
+}
+
+func TestSlicesAndMapsFollowJSONOmitempty(t *testing.T) {
+	t.Parallel()
+
+	type holder struct {
+		Items []int          `json:"items"`
+		More  []int          `json:"more,omitempty"`
+		Pair  [2]int         `json:"pair"`
+		Meta  map[string]int `json:"meta"`
+		Skip  map[string]int `json:"skip,omitempty"`
+		Ptr   *[]int         `json:"ptr"`
+	}
+
+	out := printType(t, holder{})
+	for _, want := range []string{
+		"items: number[];",
+		"more?: number[];",
+		"pair: number[];",
+		"meta: Record<string, number>;",
+		"skip?: Record<string, number>;",
+		"ptr?: number[];",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestDurationIsNumber(t *testing.T) {
+	t.Parallel()
+
+	type holder struct {
+		Wait time.Duration  `json:"wait"`
+		Idle *time.Duration `json:"idle"`
+	}
+
+	out := printType(t, holder{})
+	for _, want := range []string{
+		"wait: number;",
+		"idle?: number;",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+
+	if strings.Contains(out, "wait: string") || strings.Contains(out, "interface Duration") {
+		t.Fatalf("Duration should be a nanosecond number:\n%s", out)
+	}
+}
+
+func TestURLIsJSONStructNotString(t *testing.T) {
+	t.Parallel()
+
+	type holder struct {
+		Home url.URL `json:"home"`
+	}
+
+	out := printType(t, holder{})
+	if strings.Contains(out, "home: string;") || strings.Contains(out, "type URL = string") {
+		t.Fatalf("url.URL is not a TextMarshaler; JSON is a struct:\n%s", out)
+	}
+
+	if !strings.Contains(out, "home: URL;") {
+		t.Fatalf("url.URL field should use the struct type:\n%s", out)
 	}
 }
 

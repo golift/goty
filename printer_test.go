@@ -110,7 +110,7 @@ func ExampleGoty_Print() {
 	//  * @see golang: <golift.io/goty.Config>
 	//  */
 	// export interface Config {
-	//   overrides?: Record<null | any, Override>;
+	//   overrides: Record<null | any, Override>;
 	//   globalOverrides: Override;
 	// };
 	//
