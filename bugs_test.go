@@ -79,8 +79,8 @@ func TestByteSlicesAreStrings(t *testing.T) {
 	out := printType(t, byteSliceHolder{})
 	for _, want := range []string{
 		"raw: any;",
-		"data: string;",
-		"blob: string;",
+		"data: null | string;",
+		"blob: null | string;",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -266,7 +266,7 @@ func TestJSONMarshalerSliceIsAny(t *testing.T) {
 	out := printType(t, tagHolder{})
 	for _, want := range []string{
 		"tags: any;",
-		"list: any[];",
+		"list: null | any[];",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -304,14 +304,15 @@ func TestJSONMarshalerDoesNotFallThroughToText(t *testing.T) {
 	out := printType(t, dualHolder{})
 	for _, want := range []string{
 		"d: any;",
-		"ld: any[];",
+		"ld: null | any[];",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
 	}
 
-	if strings.Contains(out, "d: string;") || strings.Contains(out, "ld: string[];") {
+	if strings.Contains(out, "d: string;") || strings.Contains(out, "ld: string[];") ||
+		strings.Contains(out, "ld: null | string[];") {
 		t.Fatalf("json.Marshaler fell through to TextMarshaler:\n%s", out)
 	}
 }
@@ -481,7 +482,7 @@ func TestJSONStringOptionIgnoresUnsupportedKinds(t *testing.T) {
 	}
 
 	out := printType(t, tagged{})
-	if !strings.Contains(out, "items: number[];") {
+	if !strings.Contains(out, "items: null | number[];") {
 		t.Fatalf("slice with string option should stay a slice:\n%s", out)
 	}
 }
@@ -527,22 +528,28 @@ func TestSlicesAndMapsFollowJSONOmitempty(t *testing.T) {
 	t.Parallel()
 
 	type holder struct {
-		Items []int          `json:"items"`
-		More  []int          `json:"more,omitempty"`
-		Pair  [2]int         `json:"pair"`
-		Meta  map[string]int `json:"meta"`
-		Skip  map[string]int `json:"skip,omitempty"`
-		Ptr   *[]int         `json:"ptr"`
+		Items []int            `json:"items"`
+		More  []int            `json:"more,omitempty"`
+		Pair  [2]int           `json:"pair"`
+		Meta  map[string]int   `json:"meta"`
+		Skip  map[string]int   `json:"skip,omitempty"`
+		Ptr   *[]int           `json:"ptr"`
+		Nest  map[string][]int `json:"nest"`
+		Grid  [][]int          `json:"grid"`
+		Refs  []*int           `json:"refs"`
 	}
 
 	out := printType(t, holder{})
 	for _, want := range []string{
-		"items: number[];",
-		"more?: number[];",
+		"items: null | number[];",
+		"more?: null | number[];",
 		"pair: number[];",
-		"meta: Record<string, number>;",
-		"skip?: Record<string, number>;",
-		"ptr?: number[];",
+		"meta: null | Record<string, number>;",
+		"skip?: null | Record<string, number>;",
+		"ptr: null | number[];",
+		"nest: null | Record<string, null | number[]>;",
+		"grid: null | (null | number[])[];",
+		"refs: null | (null | number)[];",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -561,7 +568,7 @@ func TestDurationIsNumber(t *testing.T) {
 	out := printType(t, holder{})
 	for _, want := range []string{
 		"wait: number;",
-		"idle?: number;",
+		"idle: null | number;",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)

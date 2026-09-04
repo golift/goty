@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	tsString  = "string"
-	tsDate    = "Date"
-	tsAny     = "any"
-	tsNumber  = "number"
-	tsBoolean = "boolean"
+	tsString    = "string"
+	tsDate      = "Date"
+	tsAny       = "any"
+	tsNumber    = "number"
+	tsBoolean   = "boolean"
+	tsNullUnion = "null | "
 )
 
 // Goty is the main struct for the builder.
@@ -208,7 +209,7 @@ func (g *Goty) parseStruct(elem reflect.Type) *DataStruct {
 
 	// Marshaler / TextMarshaler structs are the whole JSON value.
 	// Expanding members would invent fields that never appear.
-	if alias, _, ok := specialType(elem); ok {
+	if alias, ok := specialType(elem); ok {
 		data.Alias = alias
 
 		return data
@@ -315,6 +316,8 @@ func jsonStringKind(typ reflect.Type) bool {
 // Otherwise, it adds the member to the struct.
 func (d *DataStruct) addMember(member *StructMember) {
 	if isAnonymousEmbed(member) {
+		// Promoted fields, not a JSON value: drop null | from pointer embeds.
+		member.Type = strings.TrimPrefix(member.Type, tsNullUnion)
 		d.Extends = append(d.Extends, member.Type)
 	} else {
 		d.Members = append(d.Members, member)
@@ -332,7 +335,7 @@ func isAnonymousEmbed(member *StructMember) bool {
 	}
 
 	// Marshaler/time.Time embeds become scalars; a type merely named Date still extends.
-	_, _, ok := specialType(member.Member.Type)
+	_, ok := specialType(member.Member.Type)
 
 	return !ok
 }
@@ -349,7 +352,7 @@ func isAnonymousStructField(elem reflect.StructField) bool {
 }
 
 // parseMember returns the typescript type for a given go type.
-// It also returns a boolean indicating if the type is optional.
+// The boolean is key omission (`?`); JSON null lives in the type as `null |`.
 // Fully recursive.
 //
 //nolint:cyclop // This is a complex function, but really it's not that bad.
@@ -358,8 +361,8 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 		return data.Name, false
 	}
 
-	if name, optional, ok := specialType(field); ok {
-		return name, optional
+	if name, ok := specialType(field); ok {
+		return name, false
 	}
 
 	if data := g.structTypes[field]; data != nil {
@@ -368,16 +371,13 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 
 	switch field.Kind() {
 	case reflect.Ptr:
-		s, _ := g.parseMember(parent, field.Elem(), member)
-		return s, true
+		return g.pointerType(parent, field, member)
 	case reflect.Struct:
 		return g.checkStruct(field, member), false
 	case reflect.Array, reflect.Slice:
-		// encoding/json always emits the key (nil slice → null). Omitempty/omitzero
-		// are applied later. Arrays are never nil.
-		return g.parseSlice(parent, field, member), false
+		return g.sliceType(parent, field, member)
 	case reflect.Map:
-		return g.parseMap(parent, field, member), false
+		return jsonNull(g.parseMap(parent, field, member)), false
 	case reflect.Bool:
 		return tsBoolean, false
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -403,36 +403,65 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 	}
 }
 
+func (g *Goty) pointerType(parent *DataStruct, field reflect.Type, member *StructMember) (string, bool) {
+	tsType, _ := g.parseMember(parent, field.Elem(), member)
+	if tsType == "" {
+		// Anonymous struct: Print uses Optional as a leading "null | ".
+		return tsType, true
+	}
+
+	return jsonNull(tsType), false
+}
+
+func (g *Goty) sliceType(parent *DataStruct, field reflect.Type, member *StructMember) (string, bool) {
+	// encoding/json always emits the key (nil slice → null). Omitempty/omitzero
+	// are applied later. Arrays are never nil.
+	tsType := g.parseSlice(parent, field, member)
+	if field.Kind() == reflect.Array {
+		return tsType, false
+	}
+
+	return jsonNull(tsType), false
+}
+
 // specialType maps types whose JSON form is not their Go kind.
 // Only contracts encoding/json itself guarantees get a narrow type:
 // time.Time is Date, time.Duration is a nanosecond number, TextMarshaler
 // without MarshalJSON is string. Arbitrary json.Marshaler output can vary
-// by value, so that is any. Optional follows pointers only; omitempty
-// and omitzero are applied by the caller.
-func specialType(field reflect.Type) (string, bool, bool) {
-	optional := field.Kind() == reflect.Ptr
+// by value, so that is any. Pointers are null | T; omitempty/omitzero
+// add ? at the caller.
+func specialType(field reflect.Type) (string, bool) {
+	nullable := field.Kind() == reflect.Ptr
 
 	for field.Kind() == reflect.Ptr {
 		field = field.Elem()
-		optional = true
+		nullable = true
 	}
+
+	var name string
 
 	switch {
 	case field == reflect.TypeFor[time.Time]():
-		return tsDate, optional, true
+		name = tsDate
 	case field == reflect.TypeFor[time.Duration]():
 		// Duration is int64, so checkStruct never sees it. encoding/json v1
 		// writes nanoseconds as a number even if Duration grows TextMarshaler.
-		return tsNumber, optional, true
+		name = tsNumber
 	case field == reflect.TypeFor[json.RawMessage]():
-		return tsAny, optional, true
+		name = tsAny
 	case implementsIface(field, reflect.TypeFor[json.Marshaler]()):
-		return tsAny, optional, true
+		name = tsAny
 	case implementsIface(field, reflect.TypeFor[encoding.TextMarshaler]()):
-		return tsString, optional, true
+		name = tsString
 	default:
-		return "", false, false
+		return "", false
 	}
+
+	if nullable {
+		return jsonNull(name), true
+	}
+
+	return name, true
 }
 
 func implementsIface(typ, iface reflect.Type) bool {
@@ -472,7 +501,7 @@ func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *Struct
 
 	name, optional := g.parseMember(parent, field.Elem(), member)
 	if optional && g.config.override(field).NullSlicePointers {
-		name = "(null | " + name + ")"
+		name = jsonNull(name)
 	}
 
 	// This doesn't really produce valid typescript. Any ideas?
@@ -481,7 +510,7 @@ func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *Struct
 	// 	size = strconv.Itoa(field.Len())
 	// }
 	// return name + "[" + size + "]"
-	return name + "[]"
+	return arrayElem(name) + "[]"
 }
 
 // parseMap returns the typescript type for a given go map.
@@ -491,14 +520,41 @@ func (g *Goty) parseMap(parent *DataStruct, field reflect.Type, member *StructMe
 	val, valOptional := g.parseMember(parent, field.Elem(), member)
 
 	if keyOptional {
-		key = "null | " + key
+		key = jsonNull(key)
+		if key == tsAny {
+			key = tsNullUnion + tsAny
+		}
 	}
 
 	if valOptional {
-		val = "null | " + val
+		val = jsonNull(val)
+		if val == tsAny {
+			val = tsNullUnion + tsAny
+		}
 	}
 
 	return "Record<" + key + ", " + val + ">"
+}
+
+// jsonNull marks a TypeScript type as accepting JSON null. any already does.
+func jsonNull(typeName string) string {
+	switch {
+	case typeName == "" || typeName == tsAny:
+		return typeName
+	case strings.HasPrefix(typeName, tsNullUnion):
+		return typeName
+	default:
+		return tsNullUnion + typeName
+	}
+}
+
+// arrayElem parenthesizes a union so `null | T[]` is not parsed as `(null | T)[]`.
+func arrayElem(typeName string) string {
+	if strings.Contains(typeName, " | ") {
+		return "(" + typeName + ")"
+	}
+
+	return typeName
 }
 
 // getStructName returns a unique, capitalized name for a struct by appending a number to the end.
