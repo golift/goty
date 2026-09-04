@@ -121,21 +121,79 @@ func TestJSONNameStringIsNotStringOption(t *testing.T) {
 	}
 }
 
+func TestJSONStringOptionIgnoresUnsupportedKinds(t *testing.T) {
+	t.Parallel()
+
+	type tagged struct {
+		Items []int `json:"items,string"` //nolint:staticcheck // json ignores string on slices; goty must too
+	}
+
+	out := printType(t, tagged{})
+	if !strings.Contains(out, "items?: number[];") {
+		t.Fatalf("slice with string option should stay a slice:\n%s", out)
+	}
+}
+
+func TestJSONStringOptionOnAnonymousStructIsIgnored(t *testing.T) {
+	t.Parallel()
+
+	type tagged struct {
+		jsonTaggedEmbed `json:",string"` //nolint:staticcheck // json ignores string on structs; goty must too
+	}
+
+	out := printType(t, tagged{})
+	if strings.Contains(out, "extends string") {
+		t.Fatalf("string option on anonymous struct produced extends string:\n%s", out)
+	}
+
+	if !strings.Contains(out, "extends JsonTaggedEmbed") {
+		t.Fatalf("anonymous struct should still be promoted:\n%s", out)
+	}
+}
+
+func TestUnexportedAnonymousScalarIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	type hiddenInt int //nolint:unused // reached through reflect
+	type outer struct {
+		hiddenInt //nolint:unused // reached through reflect
+
+		Top string `json:"top"`
+	}
+
+	out := printType(t, outer{})
+	if strings.Contains(out, "hiddenInt") || strings.Contains(out, "HiddenInt") {
+		t.Fatalf("unexported anonymous scalar was emitted:\n%s", out)
+	}
+
+	if !strings.Contains(out, "top: string;") {
+		t.Fatalf("exported field missing:\n%s", out)
+	}
+}
+
 func TestWriteStatErrorIsNotFileExists(t *testing.T) {
 	t.Parallel()
 
 	goat := goty.NewGoty(nil)
 	goat.Parse(omitZeroField{})
 
-	missingDir := filepath.Join(t.TempDir(), "nope", "out.ts")
+	notDir := filepath.Join(t.TempDir(), "not-a-dir")
+	err := os.WriteFile(notDir, []byte("x"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	err := goat.Write(missingDir, false)
+	err = goat.Write(filepath.Join(notDir, "out.ts"), false)
 	if err == nil {
-		t.Fatal("expected error writing into a missing directory")
+		t.Fatal("expected stat error")
 	}
 
 	if strings.Contains(err.Error(), "file exists") {
 		t.Fatalf("stat failure reported as file exists: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "stat file") {
+		t.Fatalf("expected stat file error, got: %v", err)
 	}
 }
 

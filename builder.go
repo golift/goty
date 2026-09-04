@@ -210,7 +210,9 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 		switch {
 		case name == "-":
 			continue
-		case !elem.IsExported() && !elem.Anonymous:
+		case !elem.IsExported() && !isAnonymousStructField(elem):
+			// encoding/json promotes exported fields from unexported anonymous
+			// structs, but ignores unexported anonymous scalars and other kinds.
 			continue
 		case name == "":
 			name = elem.Name
@@ -251,10 +253,27 @@ func applyJSONOptions(member *StructMember, options []string, typeOverride strin
 		case "omitempty", "omitzero":
 			member.Optional = true
 		case tsString:
-			if typeOverride == "" {
+			if typeOverride == "" && jsonStringKind(member.Member.Type) {
 				member.Type = tsString
 			}
 		}
+	}
+}
+
+// jsonStringKind reports whether encoding/json honors the `string` tag option.
+func jsonStringKind(typ reflect.Type) bool {
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	switch typ.Kind() { //nolint:exhaustive // encoding/json only honors string on bool, string, int, and float.
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -270,16 +289,21 @@ func (d *DataStruct) addMember(member *StructMember) {
 }
 
 func isAnonymousEmbed(member *StructMember) bool {
-	if !member.Member.Anonymous {
+	if !isAnonymousStructField(member.Member) {
 		return false
 	}
 
 	jsonName, _, _ := strings.Cut(member.Member.Tag.Get(member.ovr.Tag), ",")
-	if jsonName != "" {
+
+	return jsonName == ""
+}
+
+func isAnonymousStructField(elem reflect.StructField) bool {
+	if !elem.Anonymous {
 		return false
 	}
 
-	typ := member.Member.Type
+	typ := elem.Type
 
 	return typ.Kind() == reflect.Struct ||
 		typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
