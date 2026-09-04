@@ -67,6 +67,9 @@ type DataStruct struct {
 	// Extends is a list of struct names that this struct extends.
 	// This happens when a struct is anonymously embedded in another struct.
 	Extends []string
+	// Alias is a scalar TypeScript type when the struct marshals as that wire type.
+	// Print emits `export type Name = Alias` instead of an interface.
+	Alias string
 }
 
 // StructMember is the internal representation of a member of a typescript interface.
@@ -204,6 +207,14 @@ func (g *Goty) parseStruct(elem reflect.Type) *DataStruct {
 		g.structNames[name] = true
 		g.output = append(g.output, data)
 		g.pkgPaths[elem.PkgPath()] = struct{}{}
+	}
+
+	// A promoted MarshalJSON (time.Time embeds, TextMarshaler structs) is the
+	// whole JSON value. Expanding members would invent fields that never appear.
+	if alias, _, ok := specialType(elem); ok && isScalarWire(alias) {
+		data.Alias = alias
+
+		return data
 	}
 
 	g.addStructMembers(data, elem)
@@ -414,9 +425,44 @@ func specialType(field reflect.Type) (string, bool, bool) {
 		return tsDate, optional, true
 	case field == reflect.TypeFor[json.RawMessage]():
 		return tsAny, true, true
+	case embedsAnonymousTime(field):
+		return tsDate, optional, true
 	default:
 		return specialMarshalerType(field, optional)
 	}
+}
+
+func isScalarWire(name string) bool {
+	switch name {
+	case tsString, tsNumber, tsBoolean, tsDate:
+		return true
+	default:
+		return false
+	}
+}
+
+func embedsAnonymousTime(field reflect.Type) bool {
+	if field.Kind() != reflect.Struct {
+		return false
+	}
+
+	for idx := range field.NumField() {
+		elem := field.Field(idx)
+		if !isAnonymousStructField(elem) {
+			continue
+		}
+
+		typ := elem.Type
+		for typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+
+		if typ == reflect.TypeFor[time.Time]() {
+			return true
+		}
+	}
+
+	return false
 }
 
 func specialMarshalerType(field reflect.Type, optional bool) (string, bool, bool) {

@@ -339,6 +339,57 @@ func TestNamedDateEmbedStillExtends(t *testing.T) {
 	}
 }
 
+type timeEmbed struct {
+	time.Time
+
+	X string `json:"x"`
+}
+
+type timeEmbedHolder struct {
+	E timeEmbed `json:"e"`
+}
+
+func TestEmbeddedTimeIsWireTypeNotInterface(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, timeEmbed{})
+	if strings.Contains(out, "interface TimeEmbed") ||
+		strings.Contains(out, "Time: Date") ||
+		strings.Contains(out, "x: string") {
+		t.Fatalf("embedded time.Time was expanded:\n%s", out)
+	}
+
+	if !strings.Contains(out, "type TimeEmbed = Date") {
+		t.Fatalf("root time embed should be a Date alias:\n%s", out)
+	}
+}
+
+func TestEmbeddedTimeFieldIsDate(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, timeEmbedHolder{})
+	if !strings.Contains(out, "e: Date;") {
+		t.Fatalf("embedded time.Time field should be Date:\n%s", out)
+	}
+
+	if strings.Contains(out, "x: string") || strings.Contains(out, "interface TimeEmbed {") {
+		t.Fatalf("outer marshaler was expanded:\n%s", out)
+	}
+}
+
+func TestRootTextMarshalerIsAlias(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, pathLike{})
+	if strings.Contains(out, "interface PathLike") || strings.Contains(out, "Dir") {
+		t.Fatalf("root TextMarshaler was expanded:\n%s", out)
+	}
+
+	if !strings.Contains(out, "type PathLike = string") {
+		t.Fatalf("root TextMarshaler should be a string alias:\n%s", out)
+	}
+}
+
 type objectInt int
 
 func (objectInt) MarshalJSON() ([]byte, error) {

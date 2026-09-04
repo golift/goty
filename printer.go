@@ -63,6 +63,13 @@ func (s *DataStruct) Print(indent string, output io.Writer) {
 		exported = ""
 	}
 
+	if s.Alias != "" {
+		fmt.Fprintln(output, indent+exported+`type `+s.Name+` = `+s.Alias+`;`)
+		fmt.Fprintln(output)
+
+		return
+	}
+
 	if len(s.Extends) > 0 {
 		fmt.Fprintf(output, indent+exported+`interface %s extends %s {`,
 			s.Name, strings.Join(s.Extends, `, `))
