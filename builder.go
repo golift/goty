@@ -283,6 +283,10 @@ func applyJSONOptions(member *StructMember, options []string, typeOverride strin
 
 // jsonStringKind reports whether encoding/json honors the `string` tag option.
 func jsonStringKind(typ reflect.Type) bool {
+	if implementsIface(typ, reflect.TypeFor[json.Marshaler]()) {
+		return false
+	}
+
 	for typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
@@ -319,17 +323,10 @@ func isAnonymousEmbed(member *StructMember) bool {
 		return false
 	}
 
-	// time.Time and other marshaler structs become scalar TS types; do not extends Date.
-	return !isTSScalar(member.Type)
-}
+	// Marshaler/time.Time embeds become scalars; a type merely named Date still extends.
+	_, _, ok := specialType(member.Member.Type)
 
-func isTSScalar(name string) bool {
-	switch name {
-	case tsString, tsNumber, tsBoolean, tsDate, tsAny:
-		return true
-	default:
-		return false
-	}
+	return !ok
 }
 
 func isAnonymousStructField(elem reflect.StructField) bool {
@@ -349,13 +346,16 @@ func isAnonymousStructField(elem reflect.StructField) bool {
 //
 //nolint:cyclop // This is a complex function, but really it's not that bad.
 func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *StructMember) (string, bool) {
-	if g.structTypes[field] != nil {
-		// This happens when there was a matching enum provided.
-		return g.structTypes[field].Name, false
+	if data := g.structTypes[field]; data != nil && len(data.Elements) > 0 {
+		return data.Name, false
 	}
 
 	if name, optional, ok := specialType(field); ok {
 		return name, optional
+	}
+
+	if data := g.structTypes[field]; data != nil {
+		return data.Name, false
 	}
 
 	switch field.Kind() {
@@ -414,13 +414,23 @@ func specialType(field reflect.Type) (string, bool, bool) {
 		return tsDate, optional, true
 	case field == reflect.TypeFor[json.RawMessage]():
 		return tsAny, true, true
-	case implementsIface(field, reflect.TypeFor[json.Marshaler]()):
-		return inferJSONMarshalerType(field), optional, true
-	case implementsIface(field, reflect.TypeFor[encoding.TextMarshaler]()):
-		return tsString, optional, true
 	default:
-		return "", false, false
+		return specialMarshalerType(field, optional)
 	}
+}
+
+func specialMarshalerType(field reflect.Type, optional bool) (string, bool, bool) {
+	if implementsIface(field, reflect.TypeFor[json.Marshaler]()) {
+		if name, ok := inferJSONMarshalerType(field); ok {
+			return name, optional, true
+		}
+	}
+
+	if implementsIface(field, reflect.TypeFor[encoding.TextMarshaler]()) {
+		return tsString, optional, true
+	}
+
+	return "", false, false
 }
 
 func implementsIface(typ, iface reflect.Type) bool {
@@ -431,21 +441,24 @@ func implementsIface(typ, iface reflect.Type) bool {
 	return typ.Kind() != reflect.Ptr && reflect.PointerTo(typ).Implements(iface)
 }
 
-func inferJSONMarshalerType(typ reflect.Type) string {
+func inferJSONMarshalerType(typ reflect.Type) (string, bool) {
 	raw, err := marshalJSONZero(typ)
 	if err != nil || len(bytes.TrimSpace(raw)) == 0 {
-		return tsAny
+		return tsAny, true
 	}
 
 	switch bytes.TrimSpace(raw)[0] {
 	case '"':
-		return tsString
+		return tsString, true
 	case 't', 'f':
-		return tsBoolean
+		return tsBoolean, true
 	case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		return tsNumber
+		return tsNumber, true
+	case 'n':
+		// Nil-receiver marshalers often return null; keep the Go element type.
+		return "", false
 	default:
-		return tsAny
+		return tsAny, true
 	}
 }
 

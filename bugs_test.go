@@ -3,6 +3,7 @@ package goty_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,6 +211,115 @@ func TestMarshalersUseJSONWireType(t *testing.T) {
 	}
 }
 
+type money struct{}
+
+func (money) MarshalJSON() ([]byte, error) {
+	return []byte(`"5"`), nil
+}
+
+type wallet struct {
+	Balance money `json:"balance"`
+}
+
+func TestMarshalerFieldTypeIsOrderIndependent(t *testing.T) {
+	t.Parallel()
+
+	for _, vals := range [][]any{
+		{money{}, wallet{}},
+		{wallet{}, money{}},
+	} {
+		out := printTypes(t, vals...)
+		if !strings.Contains(out, "balance: string;") {
+			t.Fatalf("Parse(%v) should type the marshaler field as string:\n%s", vals, out)
+		}
+
+		if strings.Contains(out, "balance: Money;") {
+			t.Fatalf("Parse(%v) used the struct name instead of the wire type:\n%s", vals, out)
+		}
+	}
+}
+
+type tags []string
+
+func (t *tags) MarshalJSON() ([]byte, error) {
+	if t == nil || *t == nil {
+		return []byte("null"), nil
+	}
+
+	raw, err := json.Marshal([]string(*t))
+	if err != nil {
+		return nil, fmt.Errorf("marshal tags: %w", err)
+	}
+
+	return raw, nil
+}
+
+type tagHolder struct {
+	Tags tags   `json:"tags"`
+	List []tags `json:"list"`
+}
+
+func TestNilMarshalerProbeKeepsElementType(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, tagHolder{})
+	for _, want := range []string{
+		"tags?: string[];",
+		"list?: string[][];",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+
+	if strings.Contains(out, "tags?: any;") || strings.Contains(out, "list?: any[];") {
+		t.Fatalf("null marshaler probe collapsed the slice type:\n%s", out)
+	}
+}
+
+type date struct {
+	Y int `json:"y"`
+	M int `json:"m"`
+}
+
+type cal struct {
+	date
+
+	Z string `json:"z"`
+}
+
+func TestNamedDateEmbedStillExtends(t *testing.T) {
+	t.Parallel()
+
+	out := printType(t, cal{})
+	if !strings.Contains(out, "interface Cal extends Date") {
+		t.Fatalf("embed named Date should still extend:\n%s", out)
+	}
+}
+
+type objectInt int
+
+func (objectInt) MarshalJSON() ([]byte, error) {
+	return []byte(`{"n":1}`), nil
+}
+
+func TestJSONStringOptionDoesNotOverrideMarshaler(t *testing.T) {
+	t.Parallel()
+
+	type holder struct {
+		N objectInt `json:"n,string"`
+	}
+
+	out := printType(t, holder{})
+	if strings.Contains(out, "n: string;") || strings.Contains(out, "n?: string;") {
+		t.Fatalf("string tag overrode json.Marshaler:\n%s", out)
+	}
+
+	if !strings.Contains(out, "n: any;") {
+		t.Fatalf("marshaler object should stay any:\n%s", out)
+	}
+}
+
 func TestJSONStringOptionIgnoresUnsupportedKinds(t *testing.T) {
 	t.Parallel()
 
@@ -338,8 +448,14 @@ func TestWriteOverwriteFalse(t *testing.T) {
 func printType(t *testing.T, val any) string {
 	t.Helper()
 
+	return printTypes(t, val)
+}
+
+func printTypes(t *testing.T, vals ...any) string {
+	t.Helper()
+
 	goat := goty.NewGoty(nil)
-	goat.Parse(val)
+	goat.Parse(vals...)
 
 	var buf bytes.Buffer
 	for _, s := range goat.Values() {
