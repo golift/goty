@@ -138,13 +138,8 @@ func (d *Docs) Member(parent reflect.Type, name string) string {
 		return ""
 	}
 
-	specs := doct.Decl.Specs
-	if len(specs) < 1 {
-		return ""
-	}
-
-	tspec, ok := specs[0].(*ast.TypeSpec)
-	if !ok {
+	tspec := namedTypeSpec(doct)
+	if tspec == nil {
 		return ""
 	}
 
@@ -158,14 +153,76 @@ func (d *Docs) Member(parent reflect.Type, name string) string {
 	}
 }
 
-func findFieldName(fields []*ast.Field, name string) string {
-	for _, dm := range fields {
-		if len(dm.Names) > 0 && dm.Names[0].Name == name {
-			return strings.TrimSpace(dm.Doc.Text())
+// namedTypeSpec finds this type's spec in a possibly grouped `type ( ... )` decl.
+// Specs[0] is some other type when several share one GenDecl.
+func namedTypeSpec(doct *doc.Type) *ast.TypeSpec {
+	if doct.Decl == nil {
+		return nil
+	}
+
+	for _, spec := range doct.Decl.Specs {
+		tspec, ok := spec.(*ast.TypeSpec)
+		if ok && tspec.Name != nil && tspec.Name.Name == doct.Name {
+			return tspec
 		}
 	}
 
+	return nil
+}
+
+func findFieldName(fields []*ast.Field, name string) string {
+	for _, astField := range fields {
+		if !fieldHasName(astField, name) {
+			continue
+		}
+
+		if astField.Doc != nil {
+			if text := strings.TrimSpace(astField.Doc.Text()); text != "" {
+				return text
+			}
+		}
+
+		if astField.Comment != nil {
+			return strings.TrimSpace(astField.Comment.Text())
+		}
+
+		return ""
+	}
+
 	return ""
+}
+
+func fieldHasName(field *ast.Field, name string) bool {
+	if len(field.Names) == 0 {
+		return embeddedFieldName(field.Type) == name
+	}
+
+	for _, ident := range field.Names {
+		if ident.Name == name {
+			return true
+		}
+	}
+
+	return false
+}
+
+func embeddedFieldName(expr ast.Expr) string {
+	switch typed := expr.(type) {
+	case *ast.Ident:
+		return typed.Name
+	case *ast.StarExpr:
+		return embeddedFieldName(typed.X)
+	case *ast.SelectorExpr:
+		return typed.Sel.Name
+	case *ast.IndexExpr:
+		return embeddedFieldName(typed.X)
+	case *ast.IndexListExpr:
+		return embeddedFieldName(typed.X)
+	case *ast.ParenExpr:
+		return embeddedFieldName(typed.X)
+	default:
+		return ""
+	}
 }
 
 func (d *Docs) findDoc(typ reflect.Type) *doc.Type {

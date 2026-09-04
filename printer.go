@@ -28,8 +28,12 @@ func (g *Goty) Write(fileName string, overwrite bool) error {
 	}
 
 	_, err := os.Stat(fileName)
-	if !os.IsNotExist(err) && !overwrite {
+	if err == nil && !overwrite {
 		return fmt.Errorf("file exists: %s: %w", fileName, os.ErrExist)
+	}
+
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat file: %s: %w", fileName, err)
 	}
 
 	file, err := os.Create(fileName) //nolint:gosec // user chooses their own demise.
@@ -100,7 +104,7 @@ func (m *StructMember) Print(indent string, output io.Writer) {
 		optional = "null | "
 	}
 
-	fmt.Fprintln(output, indent+m.Name+`: `+optional+extends+`{`)
+	fmt.Fprintln(output, doc+indent+m.Name+`: `+optional+extends+`{`)
 
 	for _, m := range m.Members {
 		m.Print(indent+`  `, output)
@@ -156,7 +160,7 @@ func formatDocs(wrap bool, indent, doc string, extra ...string) string {
 	}
 
 	// sorry. :( it tries to make pretty JSDoc.
-	output += strings.ReplaceAll(indent+" * "+doc, "\n", "\n "+indent+"* ")
+	output += strings.ReplaceAll(indent+" * "+doc, "\n", "\n"+indent+" * ")
 
 	if wrap {
 		return output + "\n" + indent + " */\n"

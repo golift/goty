@@ -10,6 +10,8 @@ import (
 	"golift.io/goty/gotyface"
 )
 
+const tsString = "string"
+
 // Goty is the main struct for the builder.
 // It's used to build typescript interfaces from go structs.
 type Goty struct {
@@ -123,11 +125,13 @@ func (g *Goty) Enums(enums ...[]Enum) *Goty {
 }
 
 func (g *Goty) enum(enum []Enum) {
-	var typ reflect.Type
-	// Find the name of the Enum by looking at the type of the first value.
-	for _, e := range enum {
-		typ = reflect.TypeOf(e.Value)
-		break
+	if len(enum) == 0 {
+		return
+	}
+
+	typ := reflect.TypeOf(enum[0].Value)
+	if typ == nil {
+		return
 	}
 
 	data := &DataStruct{
@@ -201,12 +205,14 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 	for idx := range field.NumField() { // Loop each struct member
 		elem := field.Field(idx)
 		ovr := g.config.override(elem.Type)
-		tagval := strings.Split(elem.Tag.Get(ovr.Tag), ",")
+		name, opts := splitTag(elem.Tag.Get(ovr.Tag))
 
-		name := tagval[0]
-		if name == "-" || !elem.IsExported() {
+		switch {
+		case name == "-":
 			continue
-		} else if name == "" {
+		case !elem.IsExported() && !elem.Anonymous:
+			continue
+		case name == "":
 			name = elem.Name
 		}
 
@@ -225,13 +231,30 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 			member.Type, member.Optional = g.parseMember(data, elem.Type, member)
 		}
 
-		for _, tag := range tagval {
-			if tag == "omitempty" {
-				member.Optional = true
+		applyJSONOptions(member, opts, ovr.Type)
+		data.addMember(member)
+	}
+}
+
+func splitTag(tag string) (string, []string) {
+	name, rest, _ := strings.Cut(tag, ",")
+	if rest == "" {
+		return name, nil
+	}
+
+	return name, strings.Split(rest, ",")
+}
+
+func applyJSONOptions(member *StructMember, options []string, typeOverride string) {
+	for _, opt := range options {
+		switch opt {
+		case "omitempty", "omitzero":
+			member.Optional = true
+		case tsString:
+			if typeOverride == "" {
+				member.Type = tsString
 			}
 		}
-
-		data.addMember(member)
 	}
 }
 
@@ -239,12 +262,27 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 // If the member is an anonymous struct, it extends the parent struct.
 // Otherwise, it adds the member to the struct.
 func (d *DataStruct) addMember(member *StructMember) {
-	if member.Member.Anonymous && (member.Member.Type.Kind() == reflect.Struct ||
-		member.Member.Type.Kind() == reflect.Ptr && member.Member.Type.Elem().Kind() == reflect.Struct) {
+	if isAnonymousEmbed(member) {
 		d.Extends = append(d.Extends, member.Type)
 	} else {
 		d.Members = append(d.Members, member)
 	}
+}
+
+func isAnonymousEmbed(member *StructMember) bool {
+	if !member.Member.Anonymous {
+		return false
+	}
+
+	jsonName, _, _ := strings.Cut(member.Member.Tag.Get(member.ovr.Tag), ",")
+	if jsonName != "" {
+		return false
+	}
+
+	typ := member.Member.Type
+
+	return typ.Kind() == reflect.Struct ||
+		typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
 }
 
 // parseMember returns the typescript type for a given go type.
@@ -275,7 +313,7 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 		reflect.Float32, reflect.Float64, reflect.Uintptr:
 		return "number", false
 	case reflect.String:
-		return "string", false
+		return tsString, false
 	case reflect.Interface:
 		fallthrough
 	case reflect.Func:
@@ -317,8 +355,14 @@ func (g *Goty) checkStruct(field reflect.Type, member *StructMember) string {
 // parseSlice returns the typescript type for a given go slice.
 func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *StructMember) string {
 	// Go marshalls a byte slice into a base64 encoded string.
-	if field.String() == "[]uint8" {
-		return "string"
+	// json.RawMessage is a named []byte inserted as raw JSON. Since Go 1.26 it is
+	// an alias of encoding/json/jsontext.Value, so compare types, not PkgPath/Name.
+	if field == reflect.TypeFor[json.RawMessage]() {
+		return "any"
+	}
+
+	if field.Kind() == reflect.Slice && field.Elem().Kind() == reflect.Uint8 {
+		return tsString
 	}
 
 	name, optional := g.parseMember(parent, field.Elem(), member)
