@@ -1,13 +1,23 @@
 package goty
 
 import (
+	"encoding"
 	"encoding/json"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"golift.io/goty/gotyface"
+)
+
+const (
+	tsString  = "string"
+	tsDate    = "Date"
+	tsAny     = "any"
+	tsNumber  = "number"
+	tsBoolean = "boolean"
 )
 
 // Goty is the main struct for the builder.
@@ -54,6 +64,9 @@ type DataStruct struct {
 	// Extends is a list of struct names that this struct extends.
 	// This happens when a struct is anonymously embedded in another struct.
 	Extends []string
+	// Alias is a scalar TypeScript type when the struct marshals as that wire type.
+	// Print emits `export type Name = Alias` instead of an interface.
+	Alias string
 }
 
 // StructMember is the internal representation of a member of a typescript interface.
@@ -123,11 +136,13 @@ func (g *Goty) Enums(enums ...[]Enum) *Goty {
 }
 
 func (g *Goty) enum(enum []Enum) {
-	var typ reflect.Type
-	// Find the name of the Enum by looking at the type of the first value.
-	for _, e := range enum {
-		typ = reflect.TypeOf(e.Value)
-		break
+	if len(enum) == 0 {
+		return
+	}
+
+	typ := reflect.TypeOf(enum[0].Value)
+	if typ == nil {
+		return
 	}
 
 	data := &DataStruct{
@@ -191,6 +206,14 @@ func (g *Goty) parseStruct(elem reflect.Type) *DataStruct {
 		g.pkgPaths[elem.PkgPath()] = struct{}{}
 	}
 
+	// Marshaler / TextMarshaler structs are the whole JSON value.
+	// Expanding members would invent fields that never appear.
+	if alias, _, ok := specialType(elem); ok {
+		data.Alias = alias
+
+		return data
+	}
+
 	g.addStructMembers(data, elem)
 
 	return data
@@ -201,17 +224,27 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 	for idx := range field.NumField() { // Loop each struct member
 		elem := field.Field(idx)
 		ovr := g.config.override(elem.Type)
-		tagval := strings.Split(elem.Tag.Get(ovr.Tag), ",")
+		name, opts, hasComma := splitTag(elem.Tag.Get(ovr.Tag))
 
-		name := tagval[0]
-		if name == "-" || !elem.IsExported() {
+		switch {
+		case name == "-" && !hasComma:
 			continue
-		} else if name == "" {
+		case !elem.IsExported() && !isAnonymousStructField(elem):
+			// encoding/json promotes exported fields from unexported anonymous
+			// structs, but ignores unexported anonymous scalars and other kinds.
+			continue
+		case name == "":
 			name = elem.Name
 		}
 
+		tsName := g.stripBadChars(name, elem.Type)
+		if name == "-" {
+			// json:"-," is the escape for a field literally named "-".
+			tsName = `"-"`
+		}
+
 		member := &StructMember{
-			Name:     g.stripBadChars(name, elem.Type),
+			Name:     tsName,
 			doc:      g.config, // hard to attach this later.
 			Member:   elem,
 			parent:   data,
@@ -225,13 +258,55 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 			member.Type, member.Optional = g.parseMember(data, elem.Type, member)
 		}
 
-		for _, tag := range tagval {
-			if tag == "omitempty" {
-				member.Optional = true
+		applyJSONOptions(member, opts, ovr.Type)
+		data.addMember(member)
+	}
+}
+
+func splitTag(tag string) (string, []string, bool) {
+	name, rest, hasComma := strings.Cut(tag, ",")
+	if !hasComma {
+		return name, nil, false
+	}
+
+	if rest == "" {
+		return name, nil, true
+	}
+
+	return name, strings.Split(rest, ","), true
+}
+
+func applyJSONOptions(member *StructMember, options []string, typeOverride string) {
+	for _, opt := range options {
+		switch opt {
+		case "omitempty", "omitzero":
+			member.Optional = true
+		case tsString:
+			if typeOverride == "" && jsonStringKind(member.Member.Type) {
+				member.Type = tsString
 			}
 		}
+	}
+}
 
-		data.addMember(member)
+// jsonStringKind reports whether encoding/json honors the `string` tag option.
+func jsonStringKind(typ reflect.Type) bool {
+	if implementsIface(typ, reflect.TypeFor[json.Marshaler]()) {
+		return false
+	}
+
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	switch typ.Kind() { //nolint:exhaustive // encoding/json only honors string on bool, string, int, and float.
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -239,12 +314,38 @@ func (g *Goty) addStructMembers(data *DataStruct, field reflect.Type) {
 // If the member is an anonymous struct, it extends the parent struct.
 // Otherwise, it adds the member to the struct.
 func (d *DataStruct) addMember(member *StructMember) {
-	if member.Member.Anonymous && (member.Member.Type.Kind() == reflect.Struct ||
-		member.Member.Type.Kind() == reflect.Ptr && member.Member.Type.Elem().Kind() == reflect.Struct) {
+	if isAnonymousEmbed(member) {
 		d.Extends = append(d.Extends, member.Type)
 	} else {
 		d.Members = append(d.Members, member)
 	}
+}
+
+func isAnonymousEmbed(member *StructMember) bool {
+	if !isAnonymousStructField(member.Member) {
+		return false
+	}
+
+	jsonName, _, _ := strings.Cut(member.Member.Tag.Get(member.ovr.Tag), ",")
+	if jsonName != "" {
+		return false
+	}
+
+	// Marshaler/time.Time embeds become scalars; a type merely named Date still extends.
+	_, _, ok := specialType(member.Member.Type)
+
+	return !ok
+}
+
+func isAnonymousStructField(elem reflect.StructField) bool {
+	if !elem.Anonymous {
+		return false
+	}
+
+	typ := elem.Type
+
+	return typ.Kind() == reflect.Struct ||
+		typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
 }
 
 // parseMember returns the typescript type for a given go type.
@@ -253,9 +354,16 @@ func (d *DataStruct) addMember(member *StructMember) {
 //
 //nolint:cyclop // This is a complex function, but really it's not that bad.
 func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *StructMember) (string, bool) {
-	if g.structTypes[field] != nil {
-		// This happens when there was a matching enum provided.
-		return g.structTypes[field].Name, false
+	if data := g.structTypes[field]; data != nil && len(data.Elements) > 0 {
+		return data.Name, false
+	}
+
+	if name, optional, ok := specialType(field); ok {
+		return name, optional
+	}
+
+	if data := g.structTypes[field]; data != nil {
+		return data.Name, false
 	}
 
 	switch field.Kind() {
@@ -269,13 +377,13 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 	case reflect.Map:
 		return g.parseMap(parent, field, member), true
 	case reflect.Bool:
-		return "boolean", false
+		return tsBoolean, false
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64, reflect.Uintptr:
-		return "number", false
+		return tsNumber, false
 	case reflect.String:
-		return "string", false
+		return tsString, false
 	case reflect.Interface:
 		fallthrough
 	case reflect.Func:
@@ -289,8 +397,42 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 	case reflect.Invalid:
 		fallthrough
 	default:
-		return "any", true
+		return tsAny, true
 	}
+}
+
+// specialType maps types whose JSON form is not their Go kind.
+// Only contracts encoding/json itself guarantees get a narrow type:
+// time.Time is Date, TextMarshaler without MarshalJSON is string.
+// Arbitrary json.Marshaler output can vary by value, so that is any.
+func specialType(field reflect.Type) (string, bool, bool) {
+	optional := field.Kind() == reflect.Ptr || field.Kind() == reflect.Slice || field.Kind() == reflect.Map
+
+	for field.Kind() == reflect.Ptr {
+		field = field.Elem()
+		optional = true
+	}
+
+	switch {
+	case field == reflect.TypeFor[time.Time]():
+		return tsDate, optional, true
+	case field == reflect.TypeFor[json.RawMessage]():
+		return tsAny, true, true
+	case implementsIface(field, reflect.TypeFor[json.Marshaler]()):
+		return tsAny, optional, true
+	case implementsIface(field, reflect.TypeFor[encoding.TextMarshaler]()):
+		return tsString, optional, true
+	default:
+		return "", false, false
+	}
+}
+
+func implementsIface(typ, iface reflect.Type) bool {
+	if typ.Implements(iface) {
+		return true
+	}
+
+	return typ.Kind() != reflect.Ptr && reflect.PointerTo(typ).Implements(iface)
 }
 
 // checkStruct provides some logic to detect special struct types.
@@ -298,9 +440,9 @@ func (g *Goty) parseMember(parent *DataStruct, field reflect.Type, member *Struc
 func (g *Goty) checkStruct(field reflect.Type, member *StructMember) string {
 	switch field.String() {
 	case "time.Time":
-		return "Date"
+		return tsDate
 	case "time.Duration":
-		return "number"
+		return tsNumber
 	}
 
 	structMember := g.parseStruct(field)
@@ -317,8 +459,14 @@ func (g *Goty) checkStruct(field reflect.Type, member *StructMember) string {
 // parseSlice returns the typescript type for a given go slice.
 func (g *Goty) parseSlice(parent *DataStruct, field reflect.Type, member *StructMember) string {
 	// Go marshalls a byte slice into a base64 encoded string.
-	if field.String() == "[]uint8" {
-		return "string"
+	// json.RawMessage is a named []byte inserted as raw JSON. Since Go 1.26 it is
+	// an alias of encoding/json/jsontext.Value, so compare types, not PkgPath/Name.
+	if field == reflect.TypeFor[json.RawMessage]() {
+		return tsAny
+	}
+
+	if field.Kind() == reflect.Slice && field.Elem().Kind() == reflect.Uint8 {
+		return tsString
 	}
 
 	name, optional := g.parseMember(parent, field.Elem(), member)
