@@ -194,7 +194,7 @@ func TestMarshalersUseJSONWireType(t *testing.T) {
 	for _, want := range []string{
 		"when: Date;",
 		"path: string;",
-		"id: string;",
+		"id: any;",
 		"blob?: any;",
 	} {
 		if !strings.Contains(out, want) {
@@ -229,8 +229,8 @@ func TestMarshalerFieldTypeIsOrderIndependent(t *testing.T) {
 		{wallet{}, money{}},
 	} {
 		out := printTypes(t, vals...)
-		if !strings.Contains(out, "balance: string;") {
-			t.Fatalf("Parse(%v) should type the marshaler field as string:\n%s", vals, out)
+		if !strings.Contains(out, "balance: any;") {
+			t.Fatalf("Parse(%v) should type the marshaler field as any:\n%s", vals, out)
 		}
 
 		if strings.Contains(out, "balance: Money;") {
@@ -259,21 +259,17 @@ type tagHolder struct {
 	List []tags `json:"list"`
 }
 
-func TestNilMarshalerProbeKeepsElementType(t *testing.T) {
+func TestJSONMarshalerSliceIsAny(t *testing.T) {
 	t.Parallel()
 
 	out := printType(t, tagHolder{})
 	for _, want := range []string{
-		"tags?: string[];",
-		"list?: string[][];",
+		"tags?: any;",
+		"list?: any[];",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
-	}
-
-	if strings.Contains(out, "tags?: any;") || strings.Contains(out, "list?: any[];") {
-		t.Fatalf("null marshaler probe collapsed the slice type:\n%s", out)
 	}
 }
 
@@ -301,13 +297,13 @@ type dualHolder struct {
 	LD []sDual `json:"ld"`
 }
 
-func TestNullJSONMarshalerDoesNotFallThroughToText(t *testing.T) {
+func TestJSONMarshalerDoesNotFallThroughToText(t *testing.T) {
 	t.Parallel()
 
 	out := printType(t, dualHolder{})
 	for _, want := range []string{
-		"d?: string[];",
-		"ld?: string[][];",
+		"d?: any;",
+		"ld?: any[];",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
@@ -315,7 +311,7 @@ func TestNullJSONMarshalerDoesNotFallThroughToText(t *testing.T) {
 	}
 
 	if strings.Contains(out, "d?: string;") || strings.Contains(out, "ld?: string[];") {
-		t.Fatalf("null JSON probe fell through to TextMarshaler:\n%s", out)
+		t.Fatalf("json.Marshaler fell through to TextMarshaler:\n%s", out)
 	}
 }
 
@@ -359,17 +355,17 @@ func TestEmbeddedTimeIsWireTypeNotInterface(t *testing.T) {
 		t.Fatalf("embedded time.Time was expanded:\n%s", out)
 	}
 
-	if !strings.Contains(out, "type TimeEmbed = Date") {
-		t.Fatalf("root time embed should be a Date alias:\n%s", out)
+	if !strings.Contains(out, "type TimeEmbed = any") {
+		t.Fatalf("root time embed should be an any alias:\n%s", out)
 	}
 }
 
-func TestEmbeddedTimeFieldIsDate(t *testing.T) {
+func TestEmbeddedTimeFieldIsAny(t *testing.T) {
 	t.Parallel()
 
 	out := printType(t, timeEmbedHolder{})
-	if !strings.Contains(out, "e: Date;") {
-		t.Fatalf("embedded time.Time field should be Date:\n%s", out)
+	if !strings.Contains(out, "e: any;") {
+		t.Fatalf("embedded time.Time field should be any:\n%s", out)
 	}
 
 	if strings.Contains(out, "x: string") || strings.Contains(out, "interface TimeEmbed {") {
@@ -410,6 +406,15 @@ func TestOwnMarshalJSONOnTimeEmbedIsNotDate(t *testing.T) {
 	if !strings.Contains(out, "e: any;") {
 		t.Fatalf("own object marshaler should stay any:\n%s", out)
 	}
+
+	root := printType(t, ownMarshal{})
+	if strings.Contains(root, "interface OwnMarshal") || strings.Contains(root, "name: string") {
+		t.Fatalf("root object marshaler was expanded:\n%s", root)
+	}
+
+	if !strings.Contains(root, "type OwnMarshal = any") {
+		t.Fatalf("root object marshaler should be an any alias:\n%s", root)
+	}
 }
 
 type ptrTimeEmbed struct {
@@ -422,12 +427,12 @@ type ptrTimeEmbedHolder struct {
 	E ptrTimeEmbed `json:"e"`
 }
 
-func TestPointerTimeEmbedFieldIsDate(t *testing.T) {
+func TestPointerTimeEmbedFieldIsAny(t *testing.T) {
 	t.Parallel()
 
 	out := printType(t, ptrTimeEmbedHolder{})
-	if !strings.Contains(out, "e: Date;") {
-		t.Fatalf("*time.Time embed field should be Date:\n%s", out)
+	if !strings.Contains(out, "e: any;") {
+		t.Fatalf("*time.Time embed field should be any:\n%s", out)
 	}
 }
 
