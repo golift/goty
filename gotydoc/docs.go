@@ -63,13 +63,13 @@ func skipTestFiles(info fs.FileInfo) bool {
 // the last package used to win and silently drop all type docs.
 //
 //nolint:staticcheck // parser.ParseDir still returns *ast.Package.
-func pickPackage(ps map[string]*ast.Package, importPath string) *ast.Package {
-	if p, ok := ps[filepath.Base(importPath)]; ok {
-		return p
+func pickPackage(pkgs map[string]*ast.Package, importPath string) *ast.Package {
+	if pkg, ok := pkgs[filepath.Base(importPath)]; ok {
+		return pkg
 	}
 
-	names := make([]string, 0, len(ps))
-	for name := range ps {
+	names := make([]string, 0, len(pkgs))
+	for name := range pkgs {
 		if !strings.HasSuffix(name, "_test") {
 			names = append(names, name)
 		}
@@ -81,7 +81,7 @@ func pickPackage(ps map[string]*ast.Package, importPath string) *ast.Package {
 		return nil
 	}
 
-	return ps[names[0]]
+	return pkgs[names[0]]
 }
 
 // AddPkgMust adds a package to the handler's index like AddPkg but panics if there is an error.

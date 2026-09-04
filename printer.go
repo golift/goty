@@ -134,12 +134,17 @@ func (g *Goty) print(output io.Writer) {
 // formatDocs formats the documentation for an interface and an interface member.
 // It wraps the documentation in JSDoc format if wrap is true.
 func formatDocs(wrap bool, indent, doc string, extra ...string) string {
+	var docs strings.Builder
+
+	_, _ = docs.WriteString(doc)
+
 	for _, e := range extra {
 		if e != "" {
-			doc += strings.Trim(e, "\n")
+			_, _ = docs.WriteString(strings.Trim(e, "\n"))
 		}
 	}
 
+	doc = docs.String()
 	if doc == "" {
 		return ""
 	}

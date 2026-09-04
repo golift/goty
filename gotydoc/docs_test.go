@@ -16,18 +16,18 @@ func TestAddPkgIgnoresExternalTests(t *testing.T) {
 	src := sampleDir(t)
 	pkg := "golift.io/goty/gotydoc/internal/sample"
 
-	for n := range 50 {
+	for attempt := range 50 {
 		docs := gotydoc.New()
 		docs.AddPkgMust(src, pkg)
 
-		got := docs.Type(reflect.TypeOf(sample.Config{}))
+		got := docs.Type(reflect.TypeFor[sample.Config]())
 		if got != "Config is the documented type." {
-			t.Fatalf("iteration %d: Config doc = %q", n, got)
+			t.Fatalf("iteration %d: Config doc = %q", attempt, got)
 		}
 
-		got = docs.Member(reflect.TypeOf(sample.Config{}), "Name")
+		got = docs.Member(reflect.TypeFor[sample.Config](), "Name")
 		if got != "Name is a field comment." {
-			t.Fatalf("iteration %d: Name doc = %q", n, got)
+			t.Fatalf("iteration %d: Name doc = %q", attempt, got)
 		}
 	}
 }
@@ -38,7 +38,7 @@ func TestTypeDocsForGenericInstantiation(t *testing.T) {
 	docs := gotydoc.New()
 	docs.AddPkgMust(sampleDir(t), "golift.io/goty/gotydoc/internal/sample")
 
-	got := docs.Type(reflect.TypeOf(sample.APIResponse[any]{}))
+	got := docs.Type(reflect.TypeFor[sample.APIResponse[any]]())
 	if got != "APIResponse is a standard response to our caller." {
 		t.Fatalf("generic type doc = %q", got)
 	}
